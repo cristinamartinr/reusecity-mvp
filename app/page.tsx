@@ -1,65 +1,57 @@
-import Image from "next/image";
-
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main style={{ maxWidth: 900, margin: "0 auto", padding: "48px 16px", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" }}>
+      <h1 style={{ fontSize: 40, margin: 0 }}>ReUseCity MVP</h1>
+      <p style={{ marginTop: 10, fontSize: 16, lineHeight: 1.5, opacity: 0.85 }}>
+        Prototipo funcional (Proyecto 3 UOC). Publica avisos geolocalizados de objetos reutilizables para que otras personas
+        puedan recogerlos a tiempo.
+      </p>
+
+      <section style={{ marginTop: 28, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+        <a href="/mapa" style={cardStyle}>
+          <h2 style={h2Style}>Mapa</h2>
+          <p style={pStyle}>Ver avisos cercanos en un mapa (placeholder).</p>
+        </a>
+
+        <a href="/nuevo" style={cardStyle}>
+          <h2 style={h2Style}>Nuevo</h2>
+          <p style={pStyle}>Publicar un aviso en pocos pasos (placeholder).</p>
+        </a>
+
+        <a href="/lista" style={cardStyle}>
+          <h2 style={h2Style}>Lista</h2>
+          <p style={pStyle}>Explorar avisos en formato listado (placeholder).</p>
+        </a>
+      </section>
+
+      <hr style={{ margin: "28px 0", opacity: 0.25 }} />
+
+      <p style={{ fontSize: 14, opacity: 0.75 }}>
+        Nota: esta versión prioriza la funcionalidad del MVP. Elementos como alertas por zonas, filtros avanzados y caducidad
+        automática se abordarán en fases posteriores.
+      </p>
+    </main>
   );
 }
+
+const cardStyle: React.CSSProperties = {
+  display: "block",
+  padding: 16,
+  borderRadius: 12,
+  border: "1px solid rgba(0,0,0,0.12)",
+  textDecoration: "none",
+  color: "inherit",
+  background: "white",
+};
+
+const h2Style: React.CSSProperties = {
+  fontSize: 20,
+  margin: "0 0 6px 0",
+};
+
+const pStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  lineHeight: 1.4,
+  opacity: 0.8,
+};
