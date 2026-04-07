@@ -8,6 +8,8 @@ export default function NuevoPage() {
   const [description, setDescription] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -26,41 +28,77 @@ export default function NuevoPage() {
     );
   };
 
+  const uploadPhotoIfAny = async (): Promise<string | null> => {
+    if (!file) return null;
+
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `items/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("item-photos")
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw new Error("Error subiendo foto: " + uploadError.message);
+    }
+
+    const { data } = supabase.storage.from("item-photos").getPublicUrl(path);
+    return data.publicUrl;
+  };
+
   const save = async () => {
     setSaving(true);
     setMsg(null);
 
-    const latNum = lat ? Number(lat) : null;
-    const lngNum = lng ? Number(lng) : null;
+    try {
+      const latNum = lat ? Number(lat) : null;
+      const lngNum = lng ? Number(lng) : null;
 
-    const { error } = await supabase.from("item_reports").insert({
-      title: title || null,
-      description: description || null,
-      lat: latNum,
-      lng: lngNum,
-      status: "AVAILABLE",
-      // expires_at: null (lo dejamos vacío por simplicidad)
-    });
+      const photoUrl = await uploadPhotoIfAny();
 
-    setSaving(false);
+      const { error } = await supabase.from("item_reports").insert({
+        title: title || null,
+        description: description || null,
+        lat: latNum,
+        lng: lngNum,
+        status: "AVAILABLE",
+        photo_url: photoUrl,
+      });
 
-    if (error) {
-      setMsg("Error al guardar: " + error.message);
-      return;
+      if (error) throw new Error("Error guardando aviso: " + error.message);
+
+      setTitle("");
+      setDescription("");
+      setLat("");
+      setLng("");
+      setFile(null);
+      setMsg("✅ Aviso creado (con foto si añadiste una).");
+    } catch (e: any) {
+      setMsg(e?.message || "Error desconocido.");
+    } finally {
+      setSaving(false);
     }
-
-    setTitle("");
-    setDescription("");
-    setMsg("✅ Aviso creado en Supabase.");
   };
 
   return (
     <main style={styles.main}>
       <a href="/" style={styles.back}>← Volver</a>
       <h1 style={styles.h1}>Nuevo</h1>
-      <p style={styles.p}>Crea un aviso rápido (sin login). La foto la añadimos en el siguiente paso.</p>
+      <p style={styles.p}>
+        Publica un aviso rápido. Si añades foto, se sube a Supabase Storage y se guarda su URL.
+      </p>
 
       <div style={styles.card}>
+        <label style={styles.label}>Foto (opcional)</label>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+
         <label style={styles.label}>¿Qué es? (opcional)</label>
         <input
           style={styles.input}
