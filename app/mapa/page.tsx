@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -27,9 +27,9 @@ export default function MapaPage() {
       setLoading(true);
       setMsg(null);
 
-      const { data, error } = await supabase
+      const { data: reports, error } = await supabase
         .from("item_reports")
-        .select("id,title,description,status,created_at,lat,lng")
+        .select("id,title,description,lat,lng,status,created_at")
         .eq("status", "AVAILABLE")
         .order("created_at", { ascending: false });
 
@@ -40,14 +40,19 @@ export default function MapaPage() {
         return;
       }
 
-      setItems((data ?? []) as ItemReport[]);
+      // ✅ FIX: aquí era "data" y NO existía. Tiene que ser "reports".
+      setItems((reports ?? []) as ItemReport[]);
       setLoading(false);
     };
 
     load();
   }, []);
 
-  const itemsWithCoords = items.filter((it) => it.lat != null && it.lng != null);
+  // ✅ PASO C: nos quedamos solo con avisos que tengan coordenadas
+  const itemsWithCoords = useMemo(
+    () => items.filter((it) => it.lat != null && it.lng != null),
+    [items]
+  );
 
   return (
     <main style={styles.main}>
@@ -66,7 +71,12 @@ export default function MapaPage() {
 
       <div style={styles.mapBox}>
         <div style={styles.mapHeader}>
-          <strong>Centro:</strong> {center.lat.toFixed(4)}, {center.lng.toFixed(4)}
+          <div>
+            <strong>Centro:</strong> {center.lat.toFixed(4)}, {center.lng.toFixed(4)}
+          </div>
+          <div style={styles.count}>
+            <strong>{itemsWithCoords.length}</strong> avisos con coordenadas
+          </div>
         </div>
 
         {itemsWithCoords.length === 0 ? (
@@ -80,7 +90,7 @@ export default function MapaPage() {
               <li key={it.id} style={styles.markerItem}>
                 📍 <strong>{it.title ?? "(sin título)"}</strong>{" "}
                 <span style={styles.coords}>
-                  ({it.lat!.toFixed(5)}, {it.lng!.toFixed(5)})
+                  ({Number(it.lat).toFixed(5)}, {Number(it.lng).toFixed(5)})
                 </span>
               </li>
             ))}
@@ -96,12 +106,13 @@ export default function MapaPage() {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   main: { maxWidth: 900, margin: "0 auto", padding: "48px 16px", fontFamily: "system-ui" },
   back: { textDecoration: "none" },
   h1: { marginTop: 16 },
   p: { opacity: 0.8, lineHeight: 1.5, marginBottom: 18 },
   msg: { color: "crimson" },
+
   mapBox: {
     border: "1px solid #e5e5e5",
     borderRadius: 16,
@@ -109,10 +120,13 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 320,
     background: "#fafafa",
   },
-  mapHeader: { marginBottom: 12, opacity: 0.8 },
+  mapHeader: { marginBottom: 12, opacity: 0.9 },
+  count: { opacity: 0.75, marginTop: 6 },
+
   empty: { opacity: 0.7, fontStyle: "italic", padding: 12 },
   markerList: { margin: 0, paddingLeft: 18 },
   markerItem: { marginBottom: 8 },
   coords: { opacity: 0.7, fontSize: 12 },
+
   note: { marginTop: 18, opacity: 0.7, lineHeight: 1.5 },
 };
