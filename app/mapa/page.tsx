@@ -30,19 +30,11 @@ function timeAgo(iso: string) {
   return `hace ${day} d`;
 }
 
-function statusLabel(status: string) {
-  if (status === "AVAILABLE") return "AVAILABLE";
-  if (status === "REMOVED") return "REMOVED";
-  if (status === "EXPIRED") return "EXPIRED";
-  return status || "—";
-}
-
 export default function MapaPage() {
   const [items, setItems] = useState<ItemReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // Centro por defecto (Sevilla)
   const center = useMemo(() => ({ lat: 37.3891, lng: -5.9845 }), []);
 
   useEffect(() => {
@@ -80,8 +72,7 @@ export default function MapaPage() {
 
       <h1 style={styles.h1}>Mapa</h1>
       <p style={styles.p}>
-        Vista de mapa (placeholder). En la PR mostraremos marcadores con las coordenadas guardadas en{" "}
-        <code>item_reports</code>.
+        Vista funcional del mapa para el MVP. Muestra avisos disponibles con coordenadas.
       </p>
 
       {loading ? <p>Cargando…</p> : null}
@@ -99,27 +90,34 @@ export default function MapaPage() {
 
         {itemsWithCoords.length === 0 ? (
           <div style={styles.empty}>
-            No hay avisos con coordenadas todavía. (Añade <code>lat</code> y <code>lng</code> a algún registro para ver
-            “marcadores”.)
+            No hay avisos con coordenadas todavía.
           </div>
         ) : (
           <ul style={styles.markerList}>
             {itemsWithCoords.map((it) => (
               <li key={it.id} style={styles.markerItem}>
                 <span style={styles.pin}>📍</span>
+
                 <div style={styles.markerText}>
                   <div style={styles.markerTitleRow}>
                     <strong style={styles.title}>{it.title ?? "(sin título)"}</strong>
-                    <span style={styles.badge}>{statusLabel(it.status)}</span>
                     <span style={styles.ago}>{timeAgo(it.created_at)}</span>
                   </div>
 
                   {it.description ? (
                     <div style={styles.desc}>{it.description}</div>
-                  ) : null}
+                  ) : (
+                    <div style={styles.descEmpty}>(sin descripción)</div>
+                  )}
 
                   <div style={styles.coords}>
                     ({it.lat!.toFixed(5)}, {it.lng!.toFixed(5)})
+                  </div>
+
+                  <div style={styles.actions}>
+                    <Link href={`/item/${it.id}`} style={styles.linkBtn}>
+                      Ver detalle
+                    </Link>
                   </div>
                 </div>
               </li>
@@ -129,8 +127,7 @@ export default function MapaPage() {
       </div>
 
       <p style={styles.note}>
-        Nota: aquí mostraremos el mapa real en una fase posterior (Leaflet/MapLibre). Para el MVP de PR, lo importante es
-        que el “mapa” sea funcional y los avisos se carguen sin errores.
+        Siguiente paso natural: sustituir esta representación por Leaflet o MapLibre cuando toque.
       </p>
     </main>
   );
@@ -181,20 +178,23 @@ const styles: Record<string, React.CSSProperties> = {
 
   title: { fontSize: 16 },
 
-  badge: {
-    fontSize: 12,
-    padding: "2px 8px",
-    borderRadius: 999,
-    border: "1px solid #ddd",
-    background: "#f4f4f4",
-    opacity: 0.9,
-  },
-
   ago: { fontSize: 12, opacity: 0.7 },
 
   desc: { marginTop: 4, opacity: 0.85 },
+  descEmpty: { marginTop: 4, opacity: 0.5, fontStyle: "italic" },
 
   coords: { marginTop: 4, opacity: 0.7, fontSize: 12 },
+
+  actions: { marginTop: 10 },
+  linkBtn: {
+    display: "inline-block",
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #ccc",
+    textDecoration: "none",
+    color: "inherit",
+    background: "white",
+  },
 
   note: { marginTop: 18, opacity: 0.75, lineHeight: 1.6 },
 };

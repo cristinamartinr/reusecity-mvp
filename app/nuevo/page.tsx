@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function NuevoPage() {
@@ -12,6 +12,8 @@ export default function NuevoPage() {
 
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const useMyLocation = () => {
     setMsg(null);
@@ -49,6 +51,18 @@ export default function NuevoPage() {
     return data.publicUrl;
   };
 
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setLat("");
+    setLng("");
+    setFile(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     setMsg(null);
@@ -70,11 +84,7 @@ export default function NuevoPage() {
 
       if (error) throw new Error("Error guardando aviso: " + error.message);
 
-      setTitle("");
-      setDescription("");
-      setLat("");
-      setLng("");
-      setFile(null);
+      resetForm();
       setMsg("✅ Aviso creado (con foto si añadiste una).");
     } catch (e: any) {
       setMsg(e?.message || "Error desconocido.");
@@ -94,6 +104,7 @@ export default function NuevoPage() {
       <div style={styles.card}>
         <label style={styles.label}>Foto (opcional)</label>
         <input
+          ref={fileInputRef}
           type="file"
           accept="image/*"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
