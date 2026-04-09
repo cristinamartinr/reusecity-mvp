@@ -10,6 +10,7 @@ type ItemReport = {
   description: string | null;
   status: "AVAILABLE" | "REMOVED" | "EXPIRED" | string;
   created_at: string;
+  expires_at: string | null;
   photo_url: string | null;
 };
 
@@ -51,6 +52,15 @@ function isWithinFreshness(createdAt: string, filter: FreshnessFilter) {
   return true;
 }
 
+function isExpired(expiresAt: string | null) {
+  if (!expiresAt) return false;
+
+  const expiresMs = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiresMs)) return false;
+
+  return expiresMs <= Date.now();
+}
+
 export default function ListaPage() {
   const [items, setItems] = useState<ItemReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +74,7 @@ export default function ListaPage() {
 
       const { data, error } = await supabase
         .from("item_reports")
-        .select("id,title,description,status,created_at,photo_url")
+        .select("id,title,description,status,created_at,expires_at,photo_url")
         .eq("status", "AVAILABLE")
         .order("created_at", { ascending: false });
 
@@ -75,7 +85,11 @@ export default function ListaPage() {
         return;
       }
 
-      setItems((data ?? []) as ItemReport[]);
+      const safeItems = ((data ?? []) as ItemReport[]).filter(
+        (it) => !isExpired(it.expires_at)
+      );
+
+      setItems(safeItems);
       setLoading(false);
     };
 

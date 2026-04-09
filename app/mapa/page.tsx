@@ -10,6 +10,7 @@ type ItemReport = {
   description: string | null;
   status: "AVAILABLE" | "REMOVED" | "EXPIRED" | string;
   created_at: string;
+  expires_at: string | null;
   lat: number | null;
   lng: number | null;
 };
@@ -30,6 +31,15 @@ function timeAgo(iso: string) {
   return `hace ${day} d`;
 }
 
+function isExpired(expiresAt: string | null) {
+  if (!expiresAt) return false;
+
+  const expiresMs = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiresMs)) return false;
+
+  return expiresMs <= Date.now();
+}
+
 export default function MapaPage() {
   const [items, setItems] = useState<ItemReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +54,7 @@ export default function MapaPage() {
 
       const { data, error } = await supabase
         .from("item_reports")
-        .select("id,title,description,lat,lng,status,created_at")
+        .select("id,title,description,lat,lng,status,created_at,expires_at")
         .eq("status", "AVAILABLE")
         .order("created_at", { ascending: false });
 
@@ -55,7 +65,11 @@ export default function MapaPage() {
         return;
       }
 
-      setItems((data ?? []) as ItemReport[]);
+      const safeItems = ((data ?? []) as ItemReport[]).filter(
+        (it) => !isExpired(it.expires_at)
+      );
+
+      setItems(safeItems);
       setLoading(false);
     };
 
