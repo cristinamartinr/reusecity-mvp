@@ -13,6 +13,7 @@ type ItemReport = {
   lng: number | null;
   status: "AVAILABLE" | "REMOVED" | "EXPIRED" | string;
   created_at: string;
+  expires_at: string | null;
 };
 
 function timeAgo(iso: string) {
@@ -29,6 +30,13 @@ function timeAgo(iso: string) {
   if (min < 60) return `hace ${min} min`;
   if (hr < 24) return `hace ${hr} h`;
   return `hace ${day} d`;
+}
+
+function isExpired(expiresAt: string | null) {
+  if (!expiresAt) return false;
+  const expiresMs = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiresMs)) return false;
+  return expiresMs < Date.now();
 }
 
 export default function ItemDetailPage({
@@ -50,7 +58,7 @@ export default function ItemDetailPage({
 
       const { data, error } = await supabase
         .from("item_reports")
-        .select("id,title,description,photo_url,lat,lng,status,created_at")
+        .select("id,title,description,photo_url,lat,lng,status,created_at,expires_at")
         .eq("id", id)
         .single();
 
@@ -93,6 +101,11 @@ export default function ItemDetailPage({
     setUpdating(false);
   };
 
+  const expired = item ? isExpired(item.expires_at) : false;
+  const visualStatus = item ? (expired ? "EXPIRED" : item.status) : "";
+  const canMarkAsRemoved =
+    item != null && item.status === "AVAILABLE" && !expired;
+
   return (
     <main style={styles.main}>
       <div style={styles.topNav}>
@@ -125,10 +138,16 @@ export default function ItemDetailPage({
 
           <div style={styles.metaRow}>
             <strong style={styles.title}>{item.title ?? "(sin título)"}</strong>
-            <span style={styles.badge}>{item.status}</span>
+            <span style={styles.badge}>{visualStatus}</span>
           </div>
 
           <p style={styles.time}>Publicado {timeAgo(item.created_at)}</p>
+
+          {item.expires_at ? (
+            <p style={styles.expiry}>
+              Caduca: {new Date(item.expires_at).toLocaleString("es-ES")}
+            </p>
+          ) : null}
 
           {item.description ? (
             <p style={styles.description}>{item.description}</p>
@@ -145,7 +164,7 @@ export default function ItemDetailPage({
           )}
 
           <div style={styles.actions}>
-            {item.status === "AVAILABLE" ? (
+            {canMarkAsRemoved ? (
               <button
                 type="button"
                 onClick={markAsRemoved}
@@ -156,7 +175,9 @@ export default function ItemDetailPage({
               </button>
             ) : (
               <div style={styles.infoBox}>
-                Este aviso ya no está disponible.
+                {expired
+                  ? "Este aviso ha caducado."
+                  : "Este aviso ya no está disponible."}
               </div>
             )}
           </div>
@@ -229,6 +250,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   time: { opacity: 0.7, marginTop: 8 },
+  expiry: { opacity: 0.7, marginTop: 6, fontSize: 14 },
   description: { lineHeight: 1.6, marginTop: 16 },
   descriptionEmpty: { lineHeight: 1.6, marginTop: 16, opacity: 0.5, fontStyle: "italic" },
   coords: { marginTop: 16, fontSize: 14, opacity: 0.75 },

@@ -1,9 +1,18 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+function getDefaultExpiryIso() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+
 export default function NuevoPage() {
+  const router = useRouter();
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [lat, setLat] = useState("");
@@ -72,6 +81,7 @@ export default function NuevoPage() {
       const lngNum = lng ? Number(lng) : null;
 
       const photoUrl = await uploadPhotoIfAny();
+      const expiresAt = getDefaultExpiryIso();
 
       const { error } = await supabase.from("item_reports").insert({
         title: title || null,
@@ -80,12 +90,14 @@ export default function NuevoPage() {
         lng: lngNum,
         status: "AVAILABLE",
         photo_url: photoUrl,
+        expires_at: expiresAt,
       });
 
       if (error) throw new Error("Error guardando aviso: " + error.message);
 
       resetForm();
-      setMsg("✅ Aviso creado (con foto si añadiste una).");
+      router.push("/lista");
+      router.refresh();
     } catch (e: any) {
       setMsg(e?.message || "Error desconocido.");
     } finally {
@@ -148,6 +160,10 @@ export default function NuevoPage() {
           </div>
         </div>
 
+        <p style={styles.helper}>
+          Caducidad automática: 24 horas desde la publicación.
+        </p>
+
         <div style={styles.row}>
           <button style={styles.btnSecondary} onClick={useMyLocation} type="button">
             Usar mi ubicación
@@ -181,5 +197,6 @@ const styles: Record<string, React.CSSProperties> = {
   row: { display: "flex", alignItems: "center", marginTop: 14 },
   btnPrimary: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "0", cursor: "pointer" },
   btnSecondary: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #ccc", cursor: "pointer", background: "white" },
+  helper: { marginTop: 12, fontSize: 13, opacity: 0.7 },
   msg: { marginTop: 12, opacity: 0.9 },
 };
