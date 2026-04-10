@@ -124,6 +124,12 @@ export default function ItemDetailPage({
   const canMarkAsRemoved =
     item != null && item.status === "AVAILABLE" && !expired;
 
+  const cleanTitle = item?.title?.trim() || "";
+  const cleanDescription = item?.description?.trim() || "";
+  const mainLabel = cleanTitle || cleanDescription || "Objeto reutilizable";
+  const showDescription =
+    !!cleanDescription && cleanDescription !== cleanTitle;
+
   return (
     <main style={styles.main}>
       <div style={styles.topNav}>
@@ -147,7 +153,7 @@ export default function ItemDetailPage({
           {item.photo_url ? (
             <img
               src={item.photo_url}
-              alt={item.title ?? "foto del objeto"}
+              alt={mainLabel}
               style={styles.image}
             />
           ) : (
@@ -155,28 +161,21 @@ export default function ItemDetailPage({
           )}
 
           <div style={styles.metaRow}>
-            <strong style={styles.title}>{item.title ?? "(sin título)"}</strong>
+            <strong style={styles.title}>{mainLabel}</strong>
             <span style={styles.badge}>{visualStatus}</span>
           </div>
 
           <p style={styles.time}>Publicado {timeAgo(item.created_at)}</p>
 
           {item.expires_at ? (
-            <>
-              <p style={styles.expiry}>
-                Caduca: {new Date(item.expires_at).toLocaleString("es-ES")}
-              </p>
-              <p style={{ ...styles.expiry, fontWeight: 600 }}>
+            <p style={{ ...styles.expiry, fontWeight: 600 }}>
                 {timeLeft(item.expires_at)}
-              </p>
-            </>
-          ) : null}
+            </p>
+            ) : null}
 
-          {item.description ? (
-            <p style={styles.description}>{item.description}</p>
-          ) : (
-            <p style={styles.descriptionEmpty}>(sin descripción)</p>
-          )}
+          {showDescription ? (
+            <p style={styles.description}>{cleanDescription}</p>
+          ) : null}
 
           {(item.lat != null || item.lng != null) && (
             <p style={styles.coords}>
@@ -275,7 +274,6 @@ const styles: Record<string, React.CSSProperties> = {
   time: { opacity: 0.7, marginTop: 8 },
   expiry: { opacity: 0.7, marginTop: 6, fontSize: 14 },
   description: { lineHeight: 1.6, marginTop: 16 },
-  descriptionEmpty: { lineHeight: 1.6, marginTop: 16, opacity: 0.5, fontStyle: "italic" },
   coords: { marginTop: 16, fontSize: 14, opacity: 0.75 },
 
   actions: {

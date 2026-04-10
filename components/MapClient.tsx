@@ -69,71 +69,73 @@ export default function MapClient({ items, center }: Props) {
         style={{ height: "100%", width: "100%" }}
       >
         <TileLayer
-          attribution='&copy; OpenStreetMap contributors'
+          attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {items.map((it) => (
-          <Marker
-            key={it.id}
-            position={[it.lat, it.lng]}
-            icon={customIcon}
-          >
-            <Popup>
-              <div style={{ minWidth: 200 }}>
-                {it.photo_url ? (
-                  <img
-                    src={it.photo_url}
-                    alt={it.title ?? "foto del objeto"}
+        {items.map((it) => {
+          const cleanTitle = it.title?.trim() || "";
+          const cleanDescription = it.description?.trim() || "";
+          const mainLabel = cleanTitle || cleanDescription || "Objeto reutilizable";
+
+          return (
+            <Marker
+              key={it.id}
+              position={[it.lat, it.lng]}
+              icon={customIcon}
+            >
+              <Popup>
+                <div style={{ minWidth: 200 }}>
+                  {it.photo_url ? (
+                    <img
+                      src={it.photo_url}
+                      alt={mainLabel}
+                      style={{
+                        width: "100%",
+                        height: 120,
+                        objectFit: "cover",
+                        borderRadius: 10,
+                        marginBottom: 10,
+                        display: "block",
+                        border: "1px solid #e5e5e5",
+                      }}
+                    />
+                  ) : null}
+
+                  <strong style={{ display: "block", marginBottom: 6 }}>
+                    {mainLabel}
+                  </strong>
+
+                  {cleanDescription && cleanDescription !== cleanTitle ? (
+                    <p style={{ margin: "0 0 6px", opacity: 0.85 }}>
+                      {cleanDescription}
+                    </p>
+                  ) : null}
+
+                  <p style={{ margin: "0 0 8px", fontSize: 12, opacity: 0.7 }}>
+                    {timeAgo(it.created_at)}
+                  </p>
+
+                  <Link
+                    href={`/item/${it.id}`}
                     style={{
-                      width: "100%",
-                      height: 120,
-                      objectFit: "cover",
+                      display: "inline-block",
+                      padding: "8px 10px",
                       borderRadius: 10,
-                      marginBottom: 10,
-                      display: "block",
-                      border: "1px solid #e5e5e5",
+                      border: "1px solid #ccc",
+                      textDecoration: "none",
+                      color: "inherit",
+                      background: "white",
+                      fontSize: 14,
                     }}
-                  />
-                ) : null}
-
-                <strong style={{ display: "block", marginBottom: 6 }}>
-                  {it.title ?? "(sin título)"}
-                </strong>
-
-                {it.description ? (
-                  <p style={{ margin: "0 0 6px", opacity: 0.85 }}>
-                    {it.description}
-                  </p>
-                ) : (
-                  <p style={{ margin: "0 0 6px", opacity: 0.55, fontStyle: "italic" }}>
-                    (sin descripción)
-                  </p>
-                )}
-
-                <p style={{ margin: "0 0 8px", fontSize: 12, opacity: 0.7 }}>
-                  {timeAgo(it.created_at)}
-                </p>
-
-                <Link
-                  href={`/item/${it.id}`}
-                  style={{
-                    display: "inline-block",
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #ccc",
-                    textDecoration: "none",
-                    color: "inherit",
-                    background: "white",
-                    fontSize: 14,
-                  }}
-                >
-                  Ver detalle
-                </Link>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+                  >
+                    Ver detalle
+                  </Link>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
     </div>
   );
