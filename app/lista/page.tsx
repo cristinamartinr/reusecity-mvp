@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 type ItemReport = {
@@ -62,6 +63,10 @@ function isExpired(expiresAt: string | null) {
 }
 
 export default function ListaPage() {
+  const searchParams = useSearchParams();
+  const created = searchParams.get("created");
+  const removed = searchParams.get("removed");
+
   const [items, setItems] = useState<ItemReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
@@ -110,6 +115,18 @@ export default function ListaPage() {
       <p style={styles.p}>
         Explora avisos disponibles publicados recientemente.
       </p>
+
+      {created && (
+        <div style={styles.success}>
+          ✅ Aviso publicado correctamente
+        </div>
+      )}
+
+      {removed && (
+        <div style={styles.success}>
+          ✅ Aviso marcado como retirado
+        </div>
+      )}
 
       <div style={styles.toolbar}>
         <label htmlFor="freshness" style={styles.filterLabel}>
@@ -184,6 +201,15 @@ const styles: Record<string, React.CSSProperties> = {
   h1: { marginTop: 16 },
   p: { opacity: 0.8, lineHeight: 1.5, marginBottom: 18 },
   msg: { color: "crimson" },
+
+  success: {
+    margin: "12px 0 16px",
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid #d1fae5",
+    background: "#ecfdf5",
+    color: "#065f46",
+  },
 
   toolbar: {
     display: "flex",

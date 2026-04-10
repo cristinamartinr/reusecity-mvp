@@ -112,9 +112,7 @@ export default function ItemDetailPage({
       return;
     }
 
-    setItem({ ...item, status: "REMOVED" });
-    setMsg("✅ Aviso marcado como ya no está.");
-    setUpdating(false);
+    window.location.href = "/lista?removed=1";
   };
 
   const expired =

@@ -96,7 +96,7 @@ export default function NuevoPage() {
       if (error) throw new Error("Error guardando aviso: " + error.message);
 
       resetForm();
-      router.push("/lista");
+      router.push("/lista?created=1");
       router.refresh();
     } catch (e: any) {
       setMsg(e?.message || "Error desconocido.");
