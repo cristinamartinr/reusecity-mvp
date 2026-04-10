@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -62,7 +62,7 @@ function isExpired(expiresAt: string | null) {
   return expiresMs <= Date.now();
 }
 
-export default function ListaPage() {
+function ListaContent() {
   const searchParams = useSearchParams();
   const created = searchParams.get("created");
   const removed = searchParams.get("removed");
@@ -187,6 +187,26 @@ export default function ListaPage() {
         ))}
       </ul>
     </main>
+  );
+}
+
+function ListaFallback() {
+  return (
+    <main style={styles.main}>
+      <Link href="/" style={styles.back}>
+        ← Volver
+      </Link>
+      <h1 style={styles.h1}>Lista</h1>
+      <p style={styles.p}>Cargando avisos…</p>
+    </main>
+  );
+}
+
+export default function ListaPage() {
+  return (
+    <Suspense fallback={<ListaFallback />}>
+      <ListaContent />
+    </Suspense>
   );
 }
 
