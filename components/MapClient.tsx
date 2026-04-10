@@ -11,6 +11,7 @@ type MapItem = {
   created_at: string;
   lat: number;
   lng: number;
+  photo_url?: string | null;
 };
 
 type Props = {
@@ -79,7 +80,23 @@ export default function MapClient({ items, center }: Props) {
             icon={customIcon}
           >
             <Popup>
-              <div style={{ minWidth: 180 }}>
+              <div style={{ minWidth: 200 }}>
+                {it.photo_url ? (
+                  <img
+                    src={it.photo_url}
+                    alt={it.title ?? "foto del objeto"}
+                    style={{
+                      width: "100%",
+                      height: 120,
+                      objectFit: "cover",
+                      borderRadius: 10,
+                      marginBottom: 10,
+                      display: "block",
+                      border: "1px solid #e5e5e5",
+                    }}
+                  />
+                ) : null}
+
                 <strong style={{ display: "block", marginBottom: 6 }}>
                   {it.title ?? "(sin título)"}
                 </strong>

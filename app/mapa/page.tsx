@@ -18,6 +18,7 @@ type ItemReport = {
   expires_at: string | null;
   lat: number | null;
   lng: number | null;
+  photo_url: string | null;
 };
 
 function isExpired(expiresAt: string | null) {
@@ -43,7 +44,7 @@ export default function MapaPage() {
 
       const { data, error } = await supabase
         .from("item_reports")
-        .select("id,title,description,lat,lng,status,created_at,expires_at")
+        .select("id,title,description,lat,lng,status,created_at,expires_at,photo_url")
         .eq("status", "AVAILABLE")
         .order("created_at", { ascending: false });
 
@@ -99,6 +100,7 @@ export default function MapaPage() {
               created_at: it.created_at,
               lat: it.lat as number,
               lng: it.lng as number,
+              photo_url: it.photo_url,
             }))}
           />
 
