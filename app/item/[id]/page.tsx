@@ -32,11 +32,27 @@ function timeAgo(iso: string) {
   return `hace ${day} d`;
 }
 
-function isExpired(expiresAt: string | null) {
+function isExpiredByDate(expiresAt: string | null) {
   if (!expiresAt) return false;
   const expiresMs = new Date(expiresAt).getTime();
   if (Number.isNaN(expiresMs)) return false;
   return expiresMs < Date.now();
+}
+
+function timeLeft(expiresAt: string | null) {
+  if (!expiresAt) return null;
+
+  const diffMs = new Date(expiresAt).getTime() - Date.now();
+
+  if (diffMs <= 0) return "Caducado";
+
+  const min = Math.floor(diffMs / (1000 * 60));
+  const hr = Math.floor(min / 60);
+  const day = Math.floor(hr / 24);
+
+  if (min < 60) return `Caduca en ${min} min`;
+  if (hr < 24) return `Caduca en ${hr} h`;
+  return `Caduca en ${day} d`;
 }
 
 export default function ItemDetailPage({
@@ -101,8 +117,12 @@ export default function ItemDetailPage({
     setUpdating(false);
   };
 
-  const expired = item ? isExpired(item.expires_at) : false;
+  const expired =
+    item != null &&
+    (item.status === "EXPIRED" || isExpiredByDate(item.expires_at));
+
   const visualStatus = item ? (expired ? "EXPIRED" : item.status) : "";
+
   const canMarkAsRemoved =
     item != null && item.status === "AVAILABLE" && !expired;
 
@@ -144,9 +164,14 @@ export default function ItemDetailPage({
           <p style={styles.time}>Publicado {timeAgo(item.created_at)}</p>
 
           {item.expires_at ? (
-            <p style={styles.expiry}>
-              Caduca: {new Date(item.expires_at).toLocaleString("es-ES")}
-            </p>
+            <>
+              <p style={styles.expiry}>
+                Caduca: {new Date(item.expires_at).toLocaleString("es-ES")}
+              </p>
+              <p style={{ ...styles.expiry, fontWeight: 600 }}>
+                {timeLeft(item.expires_at)}
+              </p>
+            </>
           ) : null}
 
           {item.description ? (
