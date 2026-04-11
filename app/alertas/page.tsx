@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabaseClient";
 
 type AlertZone = {
   id: string;
@@ -10,14 +12,58 @@ type AlertZone = {
   radius: number;
 };
 
+type ItemReport = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  status: "AVAILABLE" | "REMOVED" | "EXPIRED" | string;
+  lat: number | null;
+  lng: number | null;
+  expires_at: string | null;
+};
+
 const STORAGE_KEY = "reusecity_alerts";
+
+function getDistanceMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+) {
+  const R = 6371000;
+  const toRad = (x: number) => (x * Math.PI) / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function isExpired(expiresAt: string | null) {
+  if (!expiresAt) return false;
+
+  const expiresMs = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiresMs)) return false;
+
+  return expiresMs <= Date.now();
+}
 
 export default function AlertasPage() {
   const [zones, setZones] = useState<AlertZone[]>([]);
+  const [items, setItems] = useState<ItemReport[]>([]);
   const [name, setName] = useState("");
   const [loadingLocation, setLoadingLocation] = useState(false);
+  const [loadingItems, setLoadingItems] = useState(true);
+  const [msg, setMsg] = useState<string | null>(null);
 
-  // 🔹 Cargar de localStorage
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -25,21 +71,50 @@ export default function AlertasPage() {
     }
   }, []);
 
-  // 🔹 Guardar en localStorage
+  useEffect(() => {
+    const loadItems = async () => {
+      setLoadingItems(true);
+      setMsg(null);
+
+      const { data, error } = await supabase
+        .from("item_reports")
+        .select("id,title,description,status,lat,lng,expires_at")
+        .eq("status", "AVAILABLE");
+
+      if (error) {
+        setMsg("No se pudieron cargar los avisos: " + error.message);
+        setItems([]);
+        setLoadingItems(false);
+        return;
+      }
+
+      const validItems = ((data ?? []) as ItemReport[]).filter(
+        (item) =>
+          item.lat != null &&
+          item.lng != null &&
+          !isExpired(item.expires_at)
+      );
+
+      setItems(validItems);
+      setLoadingItems(false);
+    };
+
+    loadItems();
+  }, []);
+
   const saveZones = (newZones: AlertZone[]) => {
     setZones(newZones);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newZones));
   };
 
-  // 📍 Obtener ubicación y guardar alerta
   const handleAddZone = () => {
     if (!name.trim()) {
-      alert("Pon un nombre a la zona");
+      alert("Pon un nombre a la zona.");
       return;
     }
 
     if (!navigator.geolocation) {
-      alert("Tu navegador no soporta geolocalización");
+      alert("Tu navegador no soporta geolocalización.");
       return;
     }
 
@@ -49,10 +124,10 @@ export default function AlertasPage() {
       (pos) => {
         const newZone: AlertZone = {
           id: Date.now().toString(),
-          name,
+          name: name.trim(),
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-          radius: 1000, // 1km por defecto
+          radius: 1000,
         };
 
         saveZones([...zones, newZone]);
@@ -60,83 +135,194 @@ export default function AlertasPage() {
         setLoadingLocation(false);
       },
       () => {
-        alert("No se pudo obtener la ubicación");
+        alert("No se pudo obtener la ubicación.");
         setLoadingLocation(false);
       }
     );
   };
 
-  // ❌ Eliminar zona
   const handleDelete = (id: string) => {
     const filtered = zones.filter((z) => z.id !== id);
     saveZones(filtered);
   };
 
-  return (
-    <div style={{ padding: "1rem", maxWidth: 600, margin: "0 auto" }}>
-      <h1>Alertas por zona</h1>
+  const zonesWithNearbyInfo = useMemo(() => {
+    return zones.map((zone) => {
+      const nearbyItems = items.filter((item) => {
+        if (item.lat == null || item.lng == null) return false;
 
-      {/* FORM */}
-      <div style={{ marginBottom: "1.5rem" }}>
+        const distance = getDistanceMeters(
+          zone.lat,
+          zone.lng,
+          item.lat,
+          item.lng
+        );
+
+        return distance <= zone.radius;
+      });
+
+      return {
+        ...zone,
+        nearbyCount: nearbyItems.length,
+      };
+    });
+  }, [zones, items]);
+
+  return (
+    <main style={styles.main}>
+      <Link href="/" style={styles.back}>
+        ← Volver
+      </Link>
+
+      <h1 style={styles.h1}>Alertas por zona</h1>
+      <p style={styles.p}>
+        Guarda zonas de interés para consultar cuántos avisos disponibles hay cerca.
+      </p>
+
+      <div style={styles.card}>
+        <label style={styles.label}>Nombre de la zona</label>
         <input
           type="text"
-          placeholder="Ej: Casa, Trabajo..."
+          placeholder="Ej.: Casa, Trabajo..."
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "0.5rem",
-            marginBottom: "0.5rem",
-          }}
+          style={styles.input}
         />
 
         <button
           onClick={handleAddZone}
           disabled={loadingLocation}
-          style={{
-            width: "100%",
-            padding: "0.7rem",
-            background: "#000",
-            color: "#fff",
-            borderRadius: "8px",
-          }}
+          style={styles.primaryBtn}
         >
-          {loadingLocation ? "Obteniendo ubicación..." : "Guardar mi ubicación"}
+          {loadingLocation ? "Obteniendo ubicación…" : "Guardar mi ubicación"}
         </button>
       </div>
 
-      {/* LISTA */}
-      <div>
-        {zones.length === 0 && <p>No tienes alertas guardadas.</p>}
+      {loadingItems ? <p style={styles.info}>Cargando avisos cercanos…</p> : null}
+      {msg ? <p style={styles.error}>{msg}</p> : null}
 
-        {zones.map((zone) => (
-          <div
-            key={zone.id}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "10px",
-              padding: "0.8rem",
-              marginBottom: "0.8rem",
-            }}
-          >
-            <strong>{zone.name}</strong>
-            <p style={{ fontSize: "0.9rem", color: "#666" }}>
-              {zone.lat.toFixed(4)}, {zone.lng.toFixed(4)} · {zone.radius} m
-            </p>
+      <section style={styles.section}>
+        {zonesWithNearbyInfo.length === 0 ? (
+          <p style={styles.empty}>No tienes alertas guardadas.</p>
+        ) : (
+          zonesWithNearbyInfo.map((zone) => (
+            <article key={zone.id} style={styles.zoneCard}>
+              <strong style={styles.zoneTitle}>{zone.name}</strong>
 
-            <button
-              onClick={() => handleDelete(zone.id)}
-              style={{
-                background: "#eee",
-                padding: "0.4rem 0.6rem",
-                borderRadius: "6px",
-              }}
-            >
-              Eliminar
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
+              <p style={styles.zoneMeta}>
+                {zone.lat.toFixed(4)}, {zone.lng.toFixed(4)} · {zone.radius} m
+              </p>
+
+              <p style={styles.zoneCount}>
+                📍 {zone.nearbyCount} aviso{zone.nearbyCount === 1 ? "" : "s"} cerca
+              </p>
+
+              <button
+                onClick={() => handleDelete(zone.id)}
+                style={styles.secondaryBtn}
+              >
+                Eliminar
+              </button>
+            </article>
+          ))
+        )}
+      </section>
+    </main>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  main: {
+    maxWidth: 720,
+    margin: "0 auto",
+    padding: "48px 16px",
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+  },
+  back: {
+    textDecoration: "none",
+    display: "inline-block",
+    marginBottom: 8,
+  },
+  h1: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  p: {
+    opacity: 0.85,
+    lineHeight: 1.6,
+    marginBottom: 18,
+  },
+  card: {
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  label: {
+    display: "block",
+    fontSize: 12,
+    opacity: 0.8,
+    marginBottom: 6,
+  },
+  input: {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #ccc",
+    marginBottom: 12,
+  },
+  primaryBtn: {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "0",
+    cursor: "pointer",
+    background: "#111",
+    color: "#fff",
+  },
+  secondaryBtn: {
+    background: "#eee",
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "1px solid #ddd",
+    cursor: "pointer",
+  },
+  info: {
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid #dbeafe",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+  },
+  error: {
+    color: "crimson",
+  },
+  section: {
+    marginTop: 12,
+  },
+  empty: {
+    opacity: 0.7,
+    fontStyle: "italic",
+  },
+  zoneCard: {
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  zoneTitle: {
+    display: "block",
+    fontSize: 18,
+    marginBottom: 8,
+  },
+  zoneMeta: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginBottom: 8,
+  },
+  zoneCount: {
+    fontSize: 15,
+    fontWeight: 600,
+    marginBottom: 12,
+  },
+};
