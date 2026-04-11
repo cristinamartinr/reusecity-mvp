@@ -56,6 +56,21 @@ function isExpired(expiresAt: string | null) {
   return expiresMs <= Date.now();
 }
 
+function formatDistanceMeters(distance: number) {
+  if (distance < 1000) {
+    return `${Math.round(distance)} m`;
+  }
+
+  return `${(distance / 1000).toFixed(1).replace(".", ",")} km`;
+}
+
+function getMainLabel(item: ItemReport) {
+  const cleanTitle = item.title?.trim() || "";
+  const cleanDescription = item.description?.trim() || "";
+
+  return cleanTitle || cleanDescription || "Objeto reutilizable";
+}
+
 export default function AlertasPage() {
   const [zones, setZones] = useState<AlertZone[]>([]);
   const [items, setItems] = useState<ItemReport[]>([]);
@@ -148,22 +163,39 @@ export default function AlertasPage() {
 
   const zonesWithNearbyInfo = useMemo(() => {
     return zones.map((zone) => {
-      const nearbyItems = items.filter((item) => {
-        if (item.lat == null || item.lng == null) return false;
+      const nearbyItems = items
+        .map((item) => {
+          if (item.lat == null || item.lng == null) return null;
 
-        const distance = getDistanceMeters(
-          zone.lat,
-          zone.lng,
-          item.lat,
-          item.lng
-        );
+          const distance = getDistanceMeters(
+            zone.lat,
+            zone.lng,
+            item.lat,
+            item.lng
+          );
 
-        return distance <= zone.radius;
-      });
+          if (distance > zone.radius) return null;
+
+          return {
+            ...item,
+            distanceMeters: distance,
+          };
+        })
+        .filter(
+          (
+            item
+          ): item is ItemReport & {
+            distanceMeters: number;
+          } => item !== null
+        )
+        .sort((a, b) => a.distanceMeters - b.distanceMeters);
+
+      const nearestItem = nearbyItems[0] ?? null;
 
       return {
         ...zone,
         nearbyCount: nearbyItems.length,
+        nearestItem,
       };
     });
   }, [zones, items]);
@@ -216,6 +248,29 @@ export default function AlertasPage() {
               <p style={styles.zoneCount}>
                 📍 {zone.nearbyCount} aviso{zone.nearbyCount === 1 ? "" : "s"} cerca
               </p>
+
+              {zone.nearestItem ? (
+                <div style={styles.nearestBox}>
+                  <div style={styles.nearestTitle}>Más cercano</div>
+                  <div style={styles.nearestMain}>
+                    {getMainLabel(zone.nearestItem)}
+                  </div>
+                  <div style={styles.nearestMeta}>
+                    a {formatDistanceMeters(zone.nearestItem.distanceMeters)}
+                  </div>
+
+                  <Link
+                    href={`/item/${zone.nearestItem.id}`}
+                    style={styles.linkBtn}
+                  >
+                    Ver detalle
+                  </Link>
+                </div>
+              ) : (
+                <div style={styles.noNearbyBox}>
+                  No hay avisos dentro del radio de esta zona.
+                </div>
+              )}
 
               <button
                 onClick={() => handleDelete(zone.id)}
@@ -286,6 +341,17 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     border: "1px solid #ddd",
     cursor: "pointer",
+    marginTop: 14,
+  },
+  linkBtn: {
+    display: "inline-block",
+    marginTop: 10,
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "1px solid #ccc",
+    textDecoration: "none",
+    color: "inherit",
+    background: "white",
   },
   info: {
     padding: "12px 14px",
@@ -324,5 +390,34 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 15,
     fontWeight: 600,
     marginBottom: 12,
+  },
+  nearestBox: {
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid #e5e7eb",
+    background: "#f9fafb",
+  },
+  nearestTitle: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: "0.03em",
+  },
+  nearestMain: {
+    fontSize: 16,
+    fontWeight: 600,
+  },
+  nearestMeta: {
+    marginTop: 4,
+    fontSize: 14,
+    opacity: 0.8,
+  },
+  noNearbyBox: {
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid #e5e7eb",
+    background: "#fafafa",
+    opacity: 0.75,
   },
 };
