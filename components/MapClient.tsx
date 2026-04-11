@@ -1,8 +1,16 @@
 "use client";
 
-import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import {
+  CircleMarker,
+  MapContainer,
+  Marker,
+  Popup,
+  TileLayer,
+  useMap,
+} from "react-leaflet";
 import Link from "next/link";
 import L from "leaflet";
+import { useEffect } from "react";
 
 type MapItem = {
   id: string;
@@ -17,6 +25,7 @@ type MapItem = {
 type Props = {
   items: MapItem[];
   center: { lat: number; lng: number };
+  userLocation?: { lat: number; lng: number } | null;
 };
 
 function timeAgo(iso: string) {
@@ -35,7 +44,27 @@ function timeAgo(iso: string) {
   return `hace ${day} d`;
 }
 
-const customIcon = L.divIcon({
+function RecenterMap({
+  center,
+  hasUserLocation,
+}: {
+  center: { lat: number; lng: number };
+  hasUserLocation: boolean;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.setView(
+      [center.lat, center.lng],
+      hasUserLocation ? 15 : 13,
+      { animate: true }
+    );
+  }, [center, hasUserLocation, map]);
+
+  return null;
+}
+
+const itemIcon = L.divIcon({
   html: `
     <div style="
       width: 18px;
@@ -52,7 +81,7 @@ const customIcon = L.divIcon({
   popupAnchor: [0, -10],
 });
 
-export default function MapClient({ items, center }: Props) {
+export default function MapClient({ items, center, userLocation }: Props) {
   return (
     <div
       style={{
@@ -64,14 +93,48 @@ export default function MapClient({ items, center }: Props) {
     >
       <MapContainer
         center={[center.lat, center.lng]}
-        zoom={13}
+        zoom={userLocation ? 15 : 13}
         scrollWheelZoom
         style={{ height: "100%", width: "100%" }}
       >
+        <RecenterMap center={center} hasUserLocation={!!userLocation} />
+
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+
+        {userLocation ? (
+          <>
+            <CircleMarker
+              center={[userLocation.lat, userLocation.lng]}
+              radius={9}
+              pathOptions={{
+                color: "#ffffff",
+                weight: 3,
+                fillColor: "#2563eb",
+                fillOpacity: 1,
+              }}
+            >
+              <Popup>
+                <div>
+                  <strong>Tu ubicación</strong>
+                </div>
+              </Popup>
+            </CircleMarker>
+
+            <CircleMarker
+              center={[userLocation.lat, userLocation.lng]}
+              radius={18}
+              pathOptions={{
+                color: "#2563eb",
+                weight: 1,
+                fillColor: "#2563eb",
+                fillOpacity: 0.12,
+              }}
+            />
+          </>
+        ) : null}
 
         {items.map((it) => {
           const cleanTitle = it.title?.trim() || "";
@@ -82,7 +145,7 @@ export default function MapClient({ items, center }: Props) {
             <Marker
               key={it.id}
               position={[it.lat, it.lng]}
-              icon={customIcon}
+              icon={itemIcon}
             >
               <Popup>
                 <div style={{ minWidth: 200 }}>

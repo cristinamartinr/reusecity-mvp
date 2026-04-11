@@ -13,9 +13,20 @@ type ItemReport = {
   created_at: string;
   expires_at: string | null;
   photo_url: string | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 type FreshnessFilter = "all" | "24h" | "48h" | "7d";
+
+type Coordinates = {
+  lat: number;
+  lng: number;
+};
+
+type ItemWithDistance = ItemReport & {
+  distanceKm: number | null;
+};
 
 function timeAgo(iso: string) {
   const d = new Date(iso);
@@ -62,6 +73,41 @@ function isExpired(expiresAt: string | null) {
   return expiresMs <= Date.now();
 }
 
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function getDistanceKm(from: Coordinates, to: Coordinates) {
+  const earthRadiusKm = 6371;
+
+  const dLat = toRadians(to.lat - from.lat);
+  const dLng = toRadians(to.lng - from.lng);
+
+  const lat1 = toRadians(from.lat);
+  const lat2 = toRadians(to.lat);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.sin(dLng / 2) *
+      Math.sin(dLng / 2) *
+      Math.cos(lat1) *
+      Math.cos(lat2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return earthRadiusKm * c;
+}
+
+function formatDistance(distanceKm: number | null) {
+  if (distanceKm == null) return null;
+
+  if (distanceKm < 1) {
+    return `a ${Math.round(distanceKm * 1000)} m`;
+  }
+
+  return `a ${distanceKm.toFixed(1).replace(".", ",")} km`;
+}
+
 function ListaContent() {
   const searchParams = useSearchParams();
   const created = searchParams.get("created");
@@ -70,6 +116,10 @@ function ListaContent() {
   const [items, setItems] = useState<ItemReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
+  const [geoMsg, setGeoMsg] = useState<string | null>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [userLocation, setUserLocation] = useState<Coordinates | null>(null);
+  const [hasTriedAutoLocation, setHasTriedAutoLocation] = useState(false);
   const [freshness, setFreshness] = useState<FreshnessFilter>("all");
 
   useEffect(() => {
@@ -79,7 +129,7 @@ function ListaContent() {
 
       const { data, error } = await supabase
         .from("item_reports")
-        .select("id,title,description,status,created_at,expires_at,photo_url")
+        .select("id,title,description,status,created_at,expires_at,photo_url,lat,lng")
         .eq("status", "AVAILABLE")
         .order("created_at", { ascending: false });
 
@@ -101,9 +151,91 @@ function ListaContent() {
     load();
   }, []);
 
+  const requestLocation = (isAutomatic = false) => {
+    if (!navigator.geolocation) {
+      if (!isAutomatic) {
+        setGeoMsg("Tu navegador no soporta geolocalización.");
+      }
+      return;
+    }
+
+    setGettingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+
+        if (!isAutomatic) {
+          setGeoMsg("📍 Lista ordenada por cercanía a tu ubicación.");
+        }
+
+        setGettingLocation(false);
+      },
+      () => {
+        if (!isAutomatic) {
+          setGeoMsg("No se pudo obtener tu ubicación (permiso denegado o error).");
+        }
+        setGettingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+      }
+    );
+  };
+
+  useEffect(() => {
+    if (hasTriedAutoLocation) return;
+
+    setHasTriedAutoLocation(true);
+    requestLocation(true);
+  }, [hasTriedAutoLocation]);
+
+  const updateMyLocation = () => {
+    setGeoMsg(null);
+    requestLocation(false);
+  };
+
   const visibleItems = useMemo(() => {
-    return items.filter((it) => isWithinFreshness(it.created_at, freshness));
-  }, [items, freshness]);
+    const filtered = items.filter((it) =>
+      isWithinFreshness(it.created_at, freshness)
+    );
+
+    const enriched: ItemWithDistance[] = filtered.map((it) => {
+      if (
+        !userLocation ||
+        it.lat == null ||
+        it.lng == null
+      ) {
+        return {
+          ...it,
+          distanceKm: null,
+        };
+      }
+
+      return {
+        ...it,
+        distanceKm: getDistanceKm(userLocation, {
+          lat: it.lat,
+          lng: it.lng,
+        }),
+      };
+    });
+
+    if (userLocation) {
+      enriched.sort((a, b) => {
+        if (a.distanceKm == null && b.distanceKm == null) return 0;
+        if (a.distanceKm == null) return 1;
+        if (b.distanceKm == null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
+    }
+
+    return enriched;
+  }, [items, freshness, userLocation]);
 
   return (
     <main style={styles.main}>
@@ -132,6 +264,7 @@ function ListaContent() {
         <label htmlFor="freshness" style={styles.filterLabel}>
           Mostrar:
         </label>
+
         <select
           id="freshness"
           value={freshness}
@@ -143,7 +276,18 @@ function ListaContent() {
           <option value="48h">Últimas 48 h</option>
           <option value="7d">Últimos 7 días</option>
         </select>
+
+        <button
+          type="button"
+          onClick={updateMyLocation}
+          disabled={gettingLocation}
+          style={styles.locationBtn}
+        >
+          {gettingLocation ? "Localizando…" : "Actualizar mi ubicación"}
+        </button>
       </div>
+
+      {geoMsg ? <div style={styles.info}>{geoMsg}</div> : null}
 
       {loading ? <p>Cargando…</p> : null}
       {msg ? <p style={styles.msg}>{msg}</p> : null}
@@ -153,38 +297,51 @@ function ListaContent() {
       ) : null}
 
       <ul style={styles.list}>
-        {visibleItems.map((it) => (
-          <li key={it.id} style={styles.item}>
-            {it.photo_url ? (
-              <img
-                src={it.photo_url}
-                alt={it.title ?? "foto del objeto"}
-                style={styles.thumb}
-              />
-            ) : (
-              <div style={styles.thumbPlaceholder}>Sin foto</div>
-            )}
+        {visibleItems.map((it) => {
+          const cleanTitle = it.title?.trim() || "";
+          const cleanDescription = it.description?.trim() || "";
+          const mainLabel = cleanTitle || cleanDescription || "Objeto reutilizable";
+          const showDescription =
+            !!cleanDescription && cleanDescription !== cleanTitle;
 
-            <div style={styles.content}>
-              <div style={styles.rowTop}>
-                <strong style={styles.title}>{it.title ?? "(sin título)"}</strong>
-                <span style={styles.meta}>{timeAgo(it.created_at)}</span>
-              </div>
-
-              {it.description ? (
-                <p style={styles.desc}>{it.description}</p>
+          return (
+            <li key={it.id} style={styles.item}>
+              {it.photo_url ? (
+                <img
+                  src={it.photo_url}
+                  alt={mainLabel}
+                  style={styles.thumb}
+                />
               ) : (
-                <p style={styles.descEmpty}>(sin descripción)</p>
+                <div style={styles.thumbPlaceholder}>Sin foto</div>
               )}
 
-              <div style={styles.actions}>
-                <Link href={`/item/${it.id}`} style={styles.linkBtn}>
-                  Ver detalle
-                </Link>
+              <div style={styles.content}>
+                <div style={styles.rowTop}>
+                  <strong style={styles.title}>{mainLabel}</strong>
+                  <div style={styles.metaGroup}>
+                    <span style={styles.meta}>{timeAgo(it.created_at)}</span>
+                    {it.distanceKm != null ? (
+                      <span style={styles.distance}>
+                        {formatDistance(it.distanceKm)}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {showDescription ? (
+                  <p style={styles.desc}>{cleanDescription}</p>
+                ) : null}
+
+                <div style={styles.actions}>
+                  <Link href={`/item/${it.id}`} style={styles.linkBtn}>
+                    Ver detalle
+                  </Link>
+                </div>
               </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </main>
   );
@@ -231,6 +388,15 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#065f46",
   },
 
+  info: {
+    marginBottom: 16,
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid #dbeafe",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+  },
+
   toolbar: {
     display: "flex",
     gap: 10,
@@ -247,6 +413,13 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     border: "1px solid #ccc",
     background: "white",
+  },
+  locationBtn: {
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #ccc",
+    background: "white",
+    cursor: "pointer",
   },
 
   list: { listStyle: "none", padding: 0, margin: 0 },
@@ -292,9 +465,23 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: "wrap",
   },
   title: { fontSize: 16 },
+  metaGroup: {
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
   meta: { fontSize: 12, opacity: 0.7 },
+  distance: {
+    fontSize: 12,
+    padding: "2px 8px",
+    borderRadius: 999,
+    background: "#f3f4f6",
+    border: "1px solid #e5e7eb",
+    opacity: 0.9,
+  },
   desc: { margin: "6px 0 0", opacity: 0.85 },
-  descEmpty: { margin: "6px 0 0", opacity: 0.5, fontStyle: "italic" },
   actions: {
     marginTop: 12,
     display: "flex",
