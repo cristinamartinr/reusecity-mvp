@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import * as exifr from "exifr";
 import { supabase } from "@/lib/supabaseClient";
 
 function getDefaultExpiryIso() {
@@ -20,23 +21,119 @@ export default function NuevoPage() {
   const [file, setFile] = useState<File | null>(null);
 
   const [msg, setMsg] = useState<string | null>(null);
+  const [geoMsg, setGeoMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [readingPhotoLocation, setReadingPhotoLocation] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const useMyLocation = () => {
     setMsg(null);
+    setGeoMsg(null);
+
     if (!navigator.geolocation) {
-      setMsg("Tu navegador no soporta geolocalización.");
+      setGeoMsg("Tu navegador no soporta geolocalización.");
       return;
     }
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLat(String(pos.coords.latitude));
         setLng(String(pos.coords.longitude));
+        setGeoMsg("📍 Ubicación actual aplicada.");
       },
-      () => setMsg("No se pudo obtener tu ubicación (permiso denegado o error).")
+      () => setGeoMsg("No se pudo obtener tu ubicación (permiso denegado o error).")
     );
+  };
+
+  const extractPhotoLocation = async (selectedFile: File) => {
+    setReadingPhotoLocation(true);
+    setGeoMsg(null);
+
+    try {
+      const gps = await exifr.gps(selectedFile);
+
+      if (gps?.latitude != null && gps?.longitude != null) {
+        setLat(gps.latitude.toFixed(6));
+        setLng(gps.longitude.toFixed(6));
+        setGeoMsg("📍 Ubicación detectada en la foto.");
+      } else {
+        setGeoMsg("La foto no contiene ubicación. Puedes usar tu ubicación manualmente.");
+      }
+    } catch {
+      setGeoMsg("No se pudo leer la ubicación de la foto. Puedes usar tu ubicación manualmente.");
+    } finally {
+      setReadingPhotoLocation(false);
+    }
+  };
+
+  const convertHeicIfNeeded = async (selectedFile: File): Promise<File> => {
+    const isHeic =
+      selectedFile.type === "image/heic" ||
+      selectedFile.type === "image/heif" ||
+      /\.hei[cf]$/i.test(selectedFile.name);
+
+    if (!isHeic) {
+      return selectedFile;
+    }
+
+    setGeoMsg("📸 Convirtiendo imagen HEIC para compatibilidad…");
+
+    const heic2anyModule = await import("heic2any");
+    const heic2any = heic2anyModule.default;
+
+    const convertedBlob = await heic2any({
+      blob: selectedFile,
+      toType: "image/jpeg",
+      quality: 0.85,
+    });
+
+    const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+
+    return new File(
+      [blob as Blob],
+      selectedFile.name.replace(/\.(heic|heif)$/i, ".jpg"),
+      { type: "image/jpeg" }
+    );
+  };
+
+  const handleFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const selectedFile = e.target.files?.[0] ?? null;
+    setFile(null);
+    setMsg(null);
+    setGeoMsg(null);
+
+    if (!selectedFile) {
+      return;
+    }
+
+    try {
+      await extractPhotoLocation(selectedFile);
+
+      const fileToUpload = await convertHeicIfNeeded(selectedFile);
+      setFile(fileToUpload);
+
+      const wasHeic =
+        selectedFile.type === "image/heic" ||
+        selectedFile.type === "image/heif" ||
+        /\.hei[cf]$/i.test(selectedFile.name);
+
+      if (wasHeic) {
+        setGeoMsg((prev) =>
+          prev
+            ? `${prev} Imagen convertida automáticamente a JPG.`
+            : "📸 Imagen HEIC convertida automáticamente a JPG."
+        );
+      }
+    } catch {
+      setFile(null);
+      setGeoMsg("No se pudo procesar la imagen seleccionada.");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
   };
 
   const uploadPhotoIfAny = async (): Promise<string | null> => {
@@ -66,6 +163,7 @@ export default function NuevoPage() {
     setLat("");
     setLng("");
     setFile(null);
+    setGeoMsg(null);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -110,7 +208,8 @@ export default function NuevoPage() {
       <a href="/" style={styles.back}>← Volver</a>
       <h1 style={styles.h1}>Nuevo</h1>
       <p style={styles.p}>
-        Publica un aviso rápido. Si añades foto, se sube a Supabase Storage y se guarda su URL.
+        Publica un aviso rápido. Si añades foto, intentaremos leer su ubicación.
+        Si no la trae, puedes usar tu ubicación manualmente.
       </p>
 
       <div style={styles.card}>
@@ -119,8 +218,14 @@ export default function NuevoPage() {
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          onChange={handleFileChange}
         />
+
+        {readingPhotoLocation ? (
+          <p style={styles.helper}>Leyendo ubicación de la foto…</p>
+        ) : null}
+
+        {geoMsg ? <p style={styles.geoMsg}>{geoMsg}</p> : null}
 
         <label style={styles.label}>¿Qué es? (opcional)</label>
         <input
@@ -198,5 +303,14 @@ const styles: Record<string, React.CSSProperties> = {
   btnPrimary: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "0", cursor: "pointer" },
   btnSecondary: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #ccc", cursor: "pointer", background: "white" },
   helper: { marginTop: 12, fontSize: 13, opacity: 0.7 },
+  geoMsg: {
+    marginTop: 10,
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #dbeafe",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    fontSize: 14,
+  },
   msg: { marginTop: 12, opacity: 0.9 },
 };
