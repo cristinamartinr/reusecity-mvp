@@ -38,6 +38,11 @@ export default function HomePage() {
           <h2 style={h2Style}>Lista</h2>
           <p style={pStyle}>Explorar avisos recientes en formato listado.</p>
         </Link>
+
+        <Link href="/alertas" style={cardStyle}>
+          <h2 style={h2Style}>Alertas</h2>
+          <p style={pStyle}>Guardar zonas de interés para futuros avisos.</p>
+        </Link>
       </section>
 
       <hr style={{ margin: "28px 0", opacity: 0.25 }} />
