@@ -22,7 +22,12 @@ type ItemReport = {
   expires_at: string | null;
 };
 
+type NearbyItem = ItemReport & {
+  distanceMeters: number;
+};
+
 const STORAGE_KEY = "reusecity_alerts";
+const DEFAULT_RADIUS_METERS = 300;
 
 function getDistanceMeters(
   lat1: number,
@@ -81,8 +86,21 @@ export default function AlertasPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
+
     if (stored) {
-      setZones(JSON.parse(stored));
+      try {
+        const parsedZones = JSON.parse(stored) as AlertZone[];
+
+        const normalizedZones = parsedZones.map((zone) => ({
+          ...zone,
+          radius: DEFAULT_RADIUS_METERS,
+        }));
+
+        setZones(normalizedZones);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedZones));
+      } catch {
+        setZones([]);
+      }
     }
   }, []);
 
@@ -142,7 +160,7 @@ export default function AlertasPage() {
           name: name.trim(),
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-          radius: 1000,
+          radius: DEFAULT_RADIUS_METERS,
         };
 
         saveZones([...zones, newZone]);
@@ -163,7 +181,7 @@ export default function AlertasPage() {
 
   const zonesWithNearbyInfo = useMemo(() => {
     return zones.map((zone) => {
-      const nearbyItems = items
+      const nearbyItems: NearbyItem[] = items
         .map((item) => {
           if (item.lat == null || item.lng == null) return null;
 
@@ -181,21 +199,13 @@ export default function AlertasPage() {
             distanceMeters: distance,
           };
         })
-        .filter(
-          (
-            item
-          ): item is ItemReport & {
-            distanceMeters: number;
-          } => item !== null
-        )
+        .filter((item): item is NearbyItem => item !== null)
         .sort((a, b) => a.distanceMeters - b.distanceMeters);
-
-      const nearestItem = nearbyItems[0] ?? null;
 
       return {
         ...zone,
         nearbyCount: nearbyItems.length,
-        nearestItem,
+        nearbyItems,
       };
     });
   }, [zones, items]);
@@ -208,7 +218,8 @@ export default function AlertasPage() {
 
       <h1 style={styles.h1}>Alertas por zona</h1>
       <p style={styles.p}>
-        Guarda zonas de interés para consultar cuántos avisos disponibles hay cerca.
+        Guarda zonas de interés para consultar avisos disponibles a menos de{" "}
+        {DEFAULT_RADIUS_METERS} metros.
       </p>
 
       <div style={styles.card}>
@@ -242,29 +253,40 @@ export default function AlertasPage() {
               <strong style={styles.zoneTitle}>{zone.name}</strong>
 
               <p style={styles.zoneMeta}>
-                {zone.lat.toFixed(4)}, {zone.lng.toFixed(4)} · {zone.radius} m
+                {zone.lat.toFixed(4)}, {zone.lng.toFixed(4)} · radio de{" "}
+                {zone.radius} m
               </p>
 
               <p style={styles.zoneCount}>
-                📍 {zone.nearbyCount} aviso{zone.nearbyCount === 1 ? "" : "s"} cerca
+                📍 {zone.nearbyCount} aviso
+                {zone.nearbyCount === 1 ? "" : "s"} a menos de {zone.radius} m
               </p>
 
-              {zone.nearestItem ? (
-                <div style={styles.nearestBox}>
-                  <div style={styles.nearestTitle}>Más cercano</div>
-                  <div style={styles.nearestMain}>
-                    {getMainLabel(zone.nearestItem)}
-                  </div>
-                  <div style={styles.nearestMeta}>
-                    a {formatDistanceMeters(zone.nearestItem.distanceMeters)}
-                  </div>
+              {zone.nearbyItems.length > 0 ? (
+                <div style={styles.nearbyBox}>
+                  <div style={styles.nearestTitle}>Avisos cercanos</div>
 
-                  <Link
-                    href={`/item/${zone.nearestItem.id}`}
-                    style={styles.linkBtn}
-                  >
-                    Ver detalle
-                  </Link>
+                  {zone.nearbyItems.map((item, index) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        ...styles.nearbyItem,
+                        ...(index === zone.nearbyItems.length - 1
+                          ? styles.nearbyItemLast
+                          : {}),
+                      }}
+                    >
+                      <div style={styles.nearestMain}>{getMainLabel(item)}</div>
+
+                      <div style={styles.nearestMeta}>
+                        a {formatDistanceMeters(item.distanceMeters)}
+                      </div>
+
+                      <Link href={`/item/${item.id}`} style={styles.linkBtn}>
+                        Ver detalle
+                      </Link>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div style={styles.noNearbyBox}>
@@ -391,16 +413,26 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     marginBottom: 12,
   },
-  nearestBox: {
+  nearbyBox: {
     padding: "12px 14px",
     borderRadius: 10,
     border: "1px solid #e5e7eb",
     background: "#f9fafb",
   },
+  nearbyItem: {
+    paddingBottom: 12,
+    marginBottom: 12,
+    borderBottom: "1px solid #e5e7eb",
+  },
+  nearbyItemLast: {
+    paddingBottom: 0,
+    marginBottom: 0,
+    borderBottom: "0",
+  },
   nearestTitle: {
     fontSize: 12,
     opacity: 0.7,
-    marginBottom: 4,
+    marginBottom: 10,
     textTransform: "uppercase",
     letterSpacing: "0.03em",
   },
