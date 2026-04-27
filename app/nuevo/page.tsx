@@ -69,8 +69,9 @@ export default function NuevoPage() {
         title,
         description,
         photo_url: photoUrl,
-        lat: lat ? Number(lat) : null,
-        lng: lng ? Number(lng) : null,
+        //coordenadas con 4 decimales para mayor privacidad (aprox 10m de precisión)
+        lat: lat ? Number(Number(lat).toFixed(4)) : null,
+        lng: lng ? Number(Number(lng).toFixed(4)) : null,
         status: "AVAILABLE",
         created_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
