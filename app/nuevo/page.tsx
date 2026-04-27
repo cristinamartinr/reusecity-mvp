@@ -1,15 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import * as exifr from "exifr";
 import { supabase } from "@/lib/supabaseClient";
-
-function getDefaultExpiryIso() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString();
-}
 
 export default function NuevoPage() {
   const router = useRouter();
@@ -18,268 +12,131 @@ export default function NuevoPage() {
   const [description, setDescription] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [geoMsg, setGeoMsg] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [readingPhotoLocation, setReadingPhotoLocation] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const useMyLocation = () => {
-    setMsg(null);
-    setGeoMsg(null);
-
+  const handleLocation = () => {
     if (!navigator.geolocation) {
-      setGeoMsg("Tu navegador no soporta geolocalización.");
+      alert("Tu navegador no soporta geolocalización");
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLat(String(pos.coords.latitude));
-        setLng(String(pos.coords.longitude));
-        setGeoMsg("📍 Ubicación actual aplicada.");
+        setLat(pos.coords.latitude.toString());
+        setLng(pos.coords.longitude.toString());
       },
-      () => setGeoMsg("No se pudo obtener tu ubicación (permiso denegado o error).")
-    );
-  };
-
-  const extractPhotoLocation = async (selectedFile: File) => {
-    setReadingPhotoLocation(true);
-    setGeoMsg(null);
-
-    try {
-      const gps = await exifr.gps(selectedFile);
-
-      if (gps?.latitude != null && gps?.longitude != null) {
-        setLat(gps.latitude.toFixed(6));
-        setLng(gps.longitude.toFixed(6));
-        setGeoMsg("📍 Ubicación detectada en la foto.");
-      } else {
-        setGeoMsg("La foto no contiene ubicación. Puedes usar tu ubicación manualmente.");
+      () => {
+        alert("No se pudo obtener la ubicación");
       }
-    } catch {
-      setGeoMsg("No se pudo leer la ubicación de la foto. Puedes usar tu ubicación manualmente.");
-    } finally {
-      setReadingPhotoLocation(false);
-    }
-  };
-
-  const convertHeicIfNeeded = async (selectedFile: File): Promise<File> => {
-    const isHeic =
-      selectedFile.type === "image/heic" ||
-      selectedFile.type === "image/heif" ||
-      /\.hei[cf]$/i.test(selectedFile.name);
-
-    if (!isHeic) {
-      return selectedFile;
-    }
-
-    setGeoMsg("📸 Convirtiendo imagen HEIC para compatibilidad…");
-
-    const heic2anyModule = await import("heic2any");
-    const heic2any = heic2anyModule.default;
-
-    const convertedBlob = await heic2any({
-      blob: selectedFile,
-      toType: "image/jpeg",
-      quality: 0.85,
-    });
-
-    const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-
-    return new File(
-      [blob as Blob],
-      selectedFile.name.replace(/\.(heic|heif)$/i, ".jpg"),
-      { type: "image/jpeg" }
     );
   };
 
-  const handleFileChange = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const selectedFile = e.target.files?.[0] ?? null;
-    setFile(null);
-    setMsg(null);
-    setGeoMsg(null);
-
-    if (!selectedFile) {
+  const handleSubmit = async () => {
+    if (!description.trim()) {
+      setMsg("Añade al menos una descripción.");
       return;
     }
 
-    try {
-      await extractPhotoLocation(selectedFile);
-
-      const fileToUpload = await convertHeicIfNeeded(selectedFile);
-      setFile(fileToUpload);
-
-      const wasHeic =
-        selectedFile.type === "image/heic" ||
-        selectedFile.type === "image/heif" ||
-        /\.hei[cf]$/i.test(selectedFile.name);
-
-      if (wasHeic) {
-        setGeoMsg((prev) =>
-          prev
-            ? `${prev} Imagen convertida automáticamente a JPG.`
-            : "📸 Imagen HEIC convertida automáticamente a JPG."
-        );
-      }
-    } catch {
-      setFile(null);
-      setGeoMsg("No se pudo procesar la imagen seleccionada.");
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
-
-  const uploadPhotoIfAny = async (): Promise<string | null> => {
-    if (!file) return null;
-
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-    const path = `items/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("item-photos")
-      .upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
-
-    if (uploadError) {
-      throw new Error("Error subiendo foto: " + uploadError.message);
-    }
-
-    const { data } = supabase.storage.from("item-photos").getPublicUrl(path);
-    return data.publicUrl;
-  };
-
-  const resetForm = () => {
-    setTitle("");
-    setDescription("");
-    setLat("");
-    setLng("");
-    setFile(null);
-    setGeoMsg(null);
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const save = async () => {
-    setSaving(true);
+    setLoading(true);
     setMsg(null);
 
-    try {
-      const latNum = lat ? Number(lat) : null;
-      const lngNum = lng ? Number(lng) : null;
+    let photoUrl: string | null = null;
 
-      const photoUrl = await uploadPhotoIfAny();
-      const expiresAt = getDefaultExpiryIso();
+    if (photo) {
+      const fileName = `items/${Date.now()}-${photo.name}`;
 
-      const { error } = await supabase.from("item_reports").insert({
-        title: title || null,
-        description: description || null,
-        lat: latNum,
-        lng: lngNum,
-        status: "AVAILABLE",
-        photo_url: photoUrl,
-        expires_at: expiresAt,
-      });
+      const { error: uploadError } = await supabase.storage
+        .from("item-photos")
+        .upload(fileName, photo);
 
-      if (error) throw new Error("Error guardando aviso: " + error.message);
+      if (uploadError) {
+        setMsg("Error subiendo imagen: " + uploadError.message);
+        setLoading(false);
+        return;
+      }
 
-      resetForm();
-      router.push("/lista?created=1");
-      router.refresh();
-    } catch (e: any) {
-      setMsg(e?.message || "Error desconocido.");
-    } finally {
-      setSaving(false);
+      const { data } = supabase.storage
+        .from("item-photos")
+        .getPublicUrl(fileName);
+
+      photoUrl = data.publicUrl;
     }
+
+    const { error } = await supabase.from("item_reports").insert([
+      {
+        title,
+        description,
+        photo_url: photoUrl,
+        lat: lat ? Number(lat) : null,
+        lng: lng ? Number(lng) : null,
+        status: "AVAILABLE",
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ]);
+
+    if (error) {
+      setMsg("Error creando aviso: " + error.message);
+      setLoading(false);
+      return;
+    }
+
+    router.push("/lista?created=1");
   };
 
   return (
     <main style={styles.main}>
-      <a href="/" style={styles.back}>← Volver</a>
-      <h1 style={styles.h1}>Nuevo</h1>
-      <p style={styles.p}>
-        Publica un aviso rápido. Si añades foto, intentaremos leer su ubicación.
-        Si no la trae, puedes usar tu ubicación manualmente.
-      </p>
+      <Link href="/" style={styles.back}>
+        ← Volver
+      </Link>
+
+      <h1 style={styles.h1}>Nuevo aviso</h1>
 
       <div style={styles.card}>
-        <label style={styles.label}>Foto (opcional)</label>
         <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-        />
-
-        {readingPhotoLocation ? (
-          <p style={styles.helper}>Leyendo ubicación de la foto…</p>
-        ) : null}
-
-        {geoMsg ? <p style={styles.geoMsg}>{geoMsg}</p> : null}
-
-        <label style={styles.label}>¿Qué es? (opcional)</label>
-        <input
-          style={styles.input}
+          type="text"
+          placeholder="Título (opcional)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Ej.: silla, libros, carrito…"
+          style={styles.input}
         />
 
-        <label style={styles.label}>Descripción (opcional)</label>
         <textarea
-          style={styles.textarea}
+          placeholder="Describe el objeto..."
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Ej.: junto al contenedor azul"
+          style={styles.textarea}
         />
 
-        <div style={styles.row}>
-          <div style={{ flex: 1 }}>
-            <label style={styles.label}>Lat</label>
-            <input
-              style={styles.input}
-              value={lat}
-              onChange={(e) => setLat(e.target.value)}
-              placeholder="37.3891"
-            />
-          </div>
-          <div style={{ width: 12 }} />
-          <div style={{ flex: 1 }}>
-            <label style={styles.label}>Lng</label>
-            <input
-              style={styles.input}
-              value={lng}
-              onChange={(e) => setLng(e.target.value)}
-              placeholder="-5.9845"
-            />
-          </div>
-        </div>
+        <button onClick={handleLocation} style={styles.secondaryBtn}>
+          Usar mi ubicación
+        </button>
 
-        <p style={styles.helper}>
-          Caducidad automática: 24 horas desde la publicación.
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+        />
+
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          style={styles.primaryBtn}
+        >
+          {loading ? "Publicando..." : "Publicar"}
+        </button>
+
+        {/* 🔥 AQUÍ va el bloque de normas */}
+        <p style={styles.notice}>
+          Al publicar aceptas las{" "}
+          <Link href="/normas" style={styles.link}>
+            normas de uso y privacidad
+          </Link>.
         </p>
 
-        <div style={styles.row}>
-          <button style={styles.btnSecondary} onClick={useMyLocation} type="button">
-            Usar mi ubicación
-          </button>
-          <div style={{ width: 12 }} />
-          <button style={styles.btnPrimary} onClick={save} disabled={saving} type="button">
-            {saving ? "Guardando…" : "Publicar"}
-          </button>
-        </div>
-
-        {msg ? <p style={styles.msg}>{msg}</p> : null}
+        {msg && <p style={styles.error}>{msg}</p>}
       </div>
     </main>
   );
@@ -287,30 +144,63 @@ export default function NuevoPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   main: {
-    maxWidth: 720,
+    maxWidth: 600,
     margin: "0 auto",
     padding: "48px 16px",
     fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
   },
-  back: { textDecoration: "none" },
-  h1: { marginTop: 16 },
-  p: { opacity: 0.8, lineHeight: 1.5, marginBottom: 18 },
-  card: { border: "1px solid #ddd", borderRadius: 12, padding: 16 },
-  label: { display: "block", fontSize: 12, opacity: 0.8, marginTop: 10, marginBottom: 6 },
-  input: { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ccc" },
-  textarea: { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ccc", minHeight: 80 },
-  row: { display: "flex", alignItems: "center", marginTop: 14 },
-  btnPrimary: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "0", cursor: "pointer" },
-  btnSecondary: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #ccc", cursor: "pointer", background: "white" },
-  helper: { marginTop: 12, fontSize: 13, opacity: 0.7 },
-  geoMsg: {
-    marginTop: 10,
+  back: {
+    textDecoration: "none",
+    display: "inline-block",
+    marginBottom: 12,
+  },
+  h1: {
+    marginBottom: 16,
+  },
+  card: {
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    padding: 16,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  input: {
     padding: "10px 12px",
     borderRadius: 10,
-    border: "1px solid #dbeafe",
-    background: "#eff6ff",
-    color: "#1d4ed8",
+    border: "1px solid #ccc",
+  },
+  textarea: {
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #ccc",
+    minHeight: 100,
+  },
+  primaryBtn: {
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "0",
+    background: "#111",
+    color: "#fff",
+    cursor: "pointer",
+  },
+  secondaryBtn: {
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #ccc",
+    background: "#fff",
+    cursor: "pointer",
+  },
+  notice: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 6,
+  },
+  link: {
+    textDecoration: "underline",
+  },
+  error: {
+    color: "crimson",
     fontSize: 14,
   },
-  msg: { marginTop: 12, opacity: 0.9 },
 };

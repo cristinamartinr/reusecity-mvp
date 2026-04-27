@@ -50,6 +50,12 @@ export default function HomePage() {
       <p style={{ fontSize: 14, opacity: 0.75 }}>
         Esta versión prioriza funcionalidad y estabilidad para el MVP.
       </p>
+
+      <div style={{ marginTop: 24 }}>
+        <Link href="/normas" style={{ fontSize: 14, opacity: 0.7 }}>
+          Normas y privacidad
+        </Link>
+      </div>
     </main>
   );
 }

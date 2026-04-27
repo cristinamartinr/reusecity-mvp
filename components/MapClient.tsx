@@ -1,16 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
+import Link from "next/link";
 import {
-  CircleMarker,
   MapContainer,
+  TileLayer,
   Marker,
   Popup,
-  TileLayer,
   useMap,
 } from "react-leaflet";
-import Link from "next/link";
 import L from "leaflet";
-import { useEffect } from "react";
 
 type MapItem = {
   id: string;
@@ -27,6 +26,25 @@ type Props = {
   center: { lat: number; lng: number };
   userLocation?: { lat: number; lng: number } | null;
 };
+
+const userIcon = new L.Icon({
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const itemIcon = new L.Icon({
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
 
 function timeAgo(iso: string) {
   const d = new Date(iso);
@@ -54,32 +72,13 @@ function RecenterMap({
   const map = useMap();
 
   useEffect(() => {
-    map.setView(
-      [center.lat, center.lng],
-      hasUserLocation ? 15 : 13,
-      { animate: true }
-    );
+    map.setView([center.lat, center.lng], hasUserLocation ? 15 : 13, {
+      animate: true,
+    });
   }, [center, hasUserLocation, map]);
 
   return null;
 }
-
-const itemIcon = L.divIcon({
-  html: `
-    <div style="
-      width: 18px;
-      height: 18px;
-      border-radius: 999px;
-      background: #ff5a36;
-      border: 2px solid white;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-    "></div>
-  `,
-  className: "",
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-  popupAnchor: [0, -10],
-});
 
 export default function MapClient({ items, center, userLocation }: Props) {
   return (
@@ -105,48 +104,24 @@ export default function MapClient({ items, center, userLocation }: Props) {
         />
 
         {userLocation ? (
-          <>
-            <CircleMarker
-              center={[userLocation.lat, userLocation.lng]}
-              radius={9}
-              pathOptions={{
-                color: "#ffffff",
-                weight: 3,
-                fillColor: "#2563eb",
-                fillOpacity: 1,
-              }}
-            >
-              <Popup>
-                <div>
-                  <strong>Tu ubicación</strong>
-                </div>
-              </Popup>
-            </CircleMarker>
-
-            <CircleMarker
-              center={[userLocation.lat, userLocation.lng]}
-              radius={18}
-              pathOptions={{
-                color: "#2563eb",
-                weight: 1,
-                fillColor: "#2563eb",
-                fillOpacity: 0.12,
-              }}
-            />
-          </>
+          <Marker
+            position={[userLocation.lat, userLocation.lng]}
+            icon={userIcon}
+          >
+            <Popup>
+              <strong>Tu ubicación</strong>
+            </Popup>
+          </Marker>
         ) : null}
 
         {items.map((it) => {
           const cleanTitle = it.title?.trim() || "";
           const cleanDescription = it.description?.trim() || "";
-          const mainLabel = cleanTitle || cleanDescription || "Objeto reutilizable";
+          const mainLabel =
+            cleanTitle || cleanDescription || "Objeto reutilizable";
 
           return (
-            <Marker
-              key={it.id}
-              position={[it.lat, it.lng]}
-              icon={itemIcon}
-            >
+            <Marker key={it.id} position={[it.lat, it.lng]} icon={itemIcon}>
               <Popup>
                 <div style={{ minWidth: 200 }}>
                   {it.photo_url ? (
