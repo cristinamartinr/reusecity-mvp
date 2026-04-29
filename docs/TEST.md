@@ -2,81 +2,116 @@
 
 Este documento recoge los escenarios de prueba del MVP y los resultados obtenidos durante la fase de validación.
 
----
+## OBJETIVO DE LAS PRUEBAS
 
-## 1. Pruebas funcionales
+Validar que el MVP permite:
 
-### Creación de avisos
+- Publicar avisos de forma rápida y sin fricción
+- Detectar automáticamente la ubicación cuando es posible
+- Consultar objetos cercanos de forma clara
+- Gestionar alertas por zona de interés
+
+Las pruebas se han centrado en escenarios reales de uso en entorno urbano.
+
+## PRUEBAS FUNCIONALES
+
+### CREACIÓN DE AVISOS
 
 - Crear aviso con foto + ubicación → OK
+  - Se publica correctamente y aparece en lista, mapa y alertas
 - Crear aviso solo con foto → OK
-- Crear aviso sin foto → OK (fallback visual)
-- Crear aviso sin coordenadas → OK (no aparece en mapa ni alertas)
+  - Flujo rápido y sin fricción
+- Crear aviso sin foto → OK
+  - Se muestra correctamente el fallback visual
+- Crear aviso sin coordenadas → OK
+  - No aparece en mapa ni alertas, comportamiento esperado
 
-### Procesamiento de imágenes
+### PROCESAMIENTO DE IMÁGENES
 
 - Subida de imagen JPG → OK
-- Subida de imagen HEIC → OK (convertida a JPG)
+- Subida de imagen HEIC → OK
+  - Se convierte automáticamente a JPG antes de almacenarse
 - Extracción de coordenadas EXIF → OK
-- Imagen sin metadatos → OK (no rompe flujo)
+  - Se detecta la ubicación automáticamente cuando está disponible
+- Imagen sin metadatos → OK
+  - No rompe el flujo, el usuario puede continuar manualmente
 
-### Visualización
+### VISUALIZACIÓN
 
 - Lista ordenada por cercanía → OK
 - Distancias correctas → OK
 - Mapa muestra avisos con coordenadas → OK
 - Avisos sin coordenadas no aparecen en mapa → OK
 
-### Estados de avisos
+### ESTADOS DE AVISOS
 
 - Aviso expirado no aparece → OK
 - Aviso con estado REMOVED no aparece → OK
 - Botón "Ya no está" actualiza estado → OK
 
-### Alertas por zona
+### ALERTAS POR ZONA
 
 - Creación de zona → OK
 - Cálculo de avisos dentro de 300 m → OK
 - Avisos cercanos ordenados por distancia → OK
 
----
+## DATASET DE PRUEBAS
 
-## 2. Dataset de pruebas
+Se han utilizado dos tipos de datos:
 
-Se han creado avisos de test para validar edge cases:
+### DATOS REALES AJUSTADOS
+
+Distribuidos en distintas zonas para simular uso real:
+
+- San Juan de Aznalfarache (cluster cercano para pruebas de proximidad)
+- Tomares
+- Mairena del Aljarafe
+- Gelves
+- Triana y Los Remedios
+
+Estos datos permiten validar:
+
+- agrupación de avisos cercanos
+- separación entre zonas
+- funcionamiento de alertas
+
+### EDGE CASES
+
+Se han creado avisos específicos:
 
 - test - sin foto
 - test - sin coordenadas
 - test - expirado
 - test - removed
 
-También se han utilizado datos reales con coordenadas ajustadas para simular escenarios urbanos.
+Estos casos permiten validar el comportamiento del sistema en situaciones límite.
 
----
+## TEST CON USUARIOS
 
-## 3. Test con usuarios
+### ESCENARIOS PROPUESTOS
 
-Escenarios planteados:
+- Encontrar un objeto cercano
+- Publicar un objeto
+- Consultar avisos en una zona guardada
 
-1. Encontrar un objeto cercano
-2. Publicar un objeto
-3. Consultar avisos en una zona guardada
+### OBSERVACIONES
 
-Observaciones (a completar):
-
-- Facilidad de uso:
-- Comprensión del flujo:
-- Dudas detectadas:
-- Mejoras sugeridas:
-
----
-
-## 4. Conclusiones
+Facilidad de uso:
+La publicación de avisos es rápida y comprensible, especialmente al priorizar la foto
+Comprensión del flujo:
+Los usuarios entienden la relación entre mapa, lista y alertas
+Dudas detectadas:
+La opción de usar la ubicación puede pasar desapercibida inicialmente
+Mejoras sugeridas:
+Aumentar la visibilidad de la geolocalización y mejorar mensajes cuando no hay avisos cercanos
+CONCLUSIONES
 
 El sistema permite:
 
-- Publicar avisos de forma rápida
-- Consultar objetos cercanos
-- Gestionar alertas por zona
+Publicar avisos de forma rápida
+Consultar objetos cercanos
+Gestionar alertas por zona
 
-El MVP es funcional y estable para validación con usuarios.
+Se confirma que el MVP cumple los objetivos funcionales planteados para esta fase del proyecto.
+
+El sistema es estable y adecuado para validación con usuarios en entorno real.
