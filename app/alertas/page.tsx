@@ -20,6 +20,7 @@ type ItemReport = {
   lat: number | null;
   lng: number | null;
   expires_at: string | null;
+  photo_url: string | null;
 };
 
 type NearbyItem = ItemReport & {
@@ -29,6 +30,13 @@ type NearbyItem = ItemReport & {
 const STORAGE_KEY = "reusecity_alerts";
 const DEFAULT_RADIUS_METERS = 300;
 
+const FALLBACK_IMAGE =
+  "https://via.placeholder.com/300x300?text=Objeto";
+
+/**
+ * Calcula la distancia entre dos coordenadas usando Haversine.
+ * El resultado se devuelve en metros.
+ */
 function getDistanceMeters(
   lat1: number,
   lng1: number,
@@ -52,6 +60,9 @@ function getDistanceMeters(
   return R * c;
 }
 
+/**
+ * Evita mostrar avisos cuya fecha de caducidad ya ha pasado.
+ */
 function isExpired(expiresAt: string | null) {
   if (!expiresAt) return false;
 
@@ -61,6 +72,9 @@ function isExpired(expiresAt: string | null) {
   return expiresMs <= Date.now();
 }
 
+/**
+ * Formatea distancias en metros o kilómetros.
+ */
 function formatDistanceMeters(distance: number) {
   if (distance < 1000) {
     return `${Math.round(distance)} m`;
@@ -69,6 +83,9 @@ function formatDistanceMeters(distance: number) {
   return `${(distance / 1000).toFixed(1).replace(".", ",")} km`;
 }
 
+/**
+ * Devuelve el texto principal de un aviso.
+ */
 function getMainLabel(item: ItemReport) {
   const cleanTitle = item.title?.trim() || "";
   const cleanDescription = item.description?.trim() || "";
@@ -84,6 +101,10 @@ export default function AlertasPage() {
   const [loadingItems, setLoadingItems] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
 
+  /**
+   * Recupera las alertas guardadas en localStorage.
+   * También normaliza zonas antiguas al radio actual de 300 metros.
+   */
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
 
@@ -104,6 +125,10 @@ export default function AlertasPage() {
     }
   }, []);
 
+  /**
+   * Carga avisos disponibles desde Supabase.
+   * Se excluyen avisos sin coordenadas y avisos caducados.
+   */
   useEffect(() => {
     const loadItems = async () => {
       setLoadingItems(true);
@@ -111,7 +136,7 @@ export default function AlertasPage() {
 
       const { data, error } = await supabase
         .from("item_reports")
-        .select("id,title,description,status,lat,lng,expires_at")
+        .select("id,title,description,status,lat,lng,expires_at,photo_url")
         .eq("status", "AVAILABLE");
 
       if (error) {
@@ -135,11 +160,17 @@ export default function AlertasPage() {
     loadItems();
   }, []);
 
+  /**
+   * Guarda zonas en estado y localStorage.
+   */
   const saveZones = (newZones: AlertZone[]) => {
     setZones(newZones);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newZones));
   };
 
+  /**
+   * Crea una nueva alerta usando la ubicación actual del usuario.
+   */
   const handleAddZone = () => {
     if (!name.trim()) {
       alert("Pon un nombre a la zona.");
@@ -174,11 +205,17 @@ export default function AlertasPage() {
     );
   };
 
+  /**
+   * Elimina una alerta guardada.
+   */
   const handleDelete = (id: string) => {
     const filtered = zones.filter((z) => z.id !== id);
     saveZones(filtered);
   };
 
+  /**
+   * Calcula los avisos cercanos para cada alerta.
+   */
   const zonesWithNearbyInfo = useMemo(() => {
     return zones.map((zone) => {
       const nearbyItems: NearbyItem[] = items
@@ -224,6 +261,7 @@ export default function AlertasPage() {
 
       <div style={styles.card}>
         <label style={styles.label}>Nombre de la zona</label>
+
         <input
           type="text"
           placeholder="Ej.: Casa, Trabajo..."
@@ -235,7 +273,10 @@ export default function AlertasPage() {
         <button
           onClick={handleAddZone}
           disabled={loadingLocation}
-          style={styles.primaryBtn}
+          style={{
+            ...styles.primaryBtn,
+            ...(loadingLocation ? styles.disabledBtn : {}),
+          }}
         >
           {loadingLocation ? "Obteniendo ubicación…" : "Guardar mi ubicación"}
         </button>
@@ -250,44 +291,64 @@ export default function AlertasPage() {
         ) : (
           zonesWithNearbyInfo.map((zone) => (
             <article key={zone.id} style={styles.zoneCard}>
-              <strong style={styles.zoneTitle}>{zone.name}</strong>
+              <div style={styles.zoneHeader}>
+                <div>
+                  <strong style={styles.zoneTitle}>{zone.name}</strong>
 
-              <p style={styles.zoneMeta}>
-                {zone.lat.toFixed(4)}, {zone.lng.toFixed(4)} · radio de{" "}
-                {zone.radius} m
-              </p>
+                  <p style={styles.zoneMeta}>
+                    {zone.lat.toFixed(4)}, {zone.lng.toFixed(4)} · radio de{" "}
+                    {zone.radius} m
+                  </p>
+                </div>
+
+                <span style={styles.zoneBadge}>
+                  {zone.nearbyCount} aviso
+                  {zone.nearbyCount === 1 ? "" : "s"}
+                </span>
+              </div>
 
               <p style={styles.zoneCount}>
-                📍 {zone.nearbyCount} aviso
-                {zone.nearbyCount === 1 ? "" : "s"} a menos de {zone.radius} m
+                Mostrando avisos dentro de {zone.radius} m
               </p>
 
               {zone.nearbyItems.length > 0 ? (
-                <div style={styles.nearbyBox}>
-                  <div style={styles.nearestTitle}>Avisos cercanos</div>
+                <ul style={styles.list}>
+                  {zone.nearbyItems.map((item) => {
+                    const mainLabel = getMainLabel(item);
+                    const cleanDescription = item.description?.trim() || "";
+                    const showDescription =
+                      !!cleanDescription && cleanDescription !== item.title;
 
-                  {zone.nearbyItems.map((item, index) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        ...styles.nearbyItem,
-                        ...(index === zone.nearbyItems.length - 1
-                          ? styles.nearbyItemLast
-                          : {}),
-                      }}
-                    >
-                      <div style={styles.nearestMain}>{getMainLabel(item)}</div>
+                    return (
+                      <li key={item.id} style={styles.item}>
+                        <img
+                          src={item.photo_url || FALLBACK_IMAGE}
+                          alt={mainLabel}
+                          style={styles.thumb}
+                        />
 
-                      <div style={styles.nearestMeta}>
-                        a {formatDistanceMeters(item.distanceMeters)}
-                      </div>
+                        <div style={styles.content}>
+                          <div style={styles.rowTop}>
+                            <strong style={styles.itemTitle}>{mainLabel}</strong>
 
-                      <Link href={`/item/${item.id}`} style={styles.linkBtn}>
-                        Ver detalle
-                      </Link>
-                    </div>
-                  ))}
-                </div>
+                            <span style={styles.distance}>
+                              {item.distanceMeters < 50 ? "Muy cerca · " : ""}
+                              a {formatDistanceMeters(item.distanceMeters)}
+                            </span>
+                          </div>
+
+                          {showDescription ? (
+                            <p style={styles.desc}>{cleanDescription}</p>
+                          ) : null}
+
+                          <Link href={`/item/${item.id}`} style={styles.linkBtn}>
+                            Ver detalle
+                          </Link>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               ) : (
                 <div style={styles.noNearbyBox}>
                   No hay avisos dentro del radio de esta zona.
@@ -298,19 +359,25 @@ export default function AlertasPage() {
                 onClick={() => handleDelete(zone.id)}
                 style={styles.secondaryBtn}
               >
-                Eliminar
+                Eliminar alerta
               </button>
             </article>
           ))
         )}
       </section>
+
+      <footer style={styles.footer}>
+        <p style={styles.footerText}>
+          Las alertas se guardan en este dispositivo mediante almacenamiento local.
+        </p>
+      </footer>
     </main>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
   main: {
-    maxWidth: 720,
+    maxWidth: 900,
     margin: "0 auto",
     padding: "48px 16px",
     fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
@@ -318,22 +385,26 @@ const styles: Record<string, React.CSSProperties> = {
   back: {
     textDecoration: "none",
     display: "inline-block",
-    marginBottom: 8,
+    marginBottom: 16,
+    color: "inherit",
   },
   h1: {
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: 0,
+    marginBottom: 6,
+    fontSize: 24,
   },
   p: {
     opacity: 0.85,
-    lineHeight: 1.6,
+    lineHeight: 1.5,
+    marginTop: 0,
     marginBottom: 18,
   },
   card: {
     border: "1px solid #ddd",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 24,
+    background: "white",
   },
   label: {
     display: "block",
@@ -356,6 +427,11 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     background: "#111",
     color: "#fff",
+    fontWeight: 600,
+  },
+  disabledBtn: {
+    opacity: 0.65,
+    cursor: "not-allowed",
   },
   secondaryBtn: {
     background: "#eee",
@@ -364,16 +440,18 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #ddd",
     cursor: "pointer",
     marginTop: 14,
+    fontWeight: 500,
   },
   linkBtn: {
     display: "inline-block",
     marginTop: 10,
     padding: "8px 12px",
-    borderRadius: 8,
+    borderRadius: 10,
     border: "1px solid #ccc",
     textDecoration: "none",
     color: "inherit",
     background: "white",
+    fontWeight: 500,
   },
   info: {
     padding: "12px 14px",
@@ -394,62 +472,112 @@ const styles: Record<string, React.CSSProperties> = {
   },
   zoneCard: {
     border: "1px solid #ddd",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
+    background: "white",
+  },
+  zoneHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    marginBottom: 8,
   },
   zoneTitle: {
     display: "block",
     fontSize: 18,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   zoneMeta: {
     fontSize: 14,
     opacity: 0.7,
-    marginBottom: 8,
+    margin: 0,
+  },
+  zoneBadge: {
+    fontSize: 12,
+    padding: "4px 10px",
+    borderRadius: 999,
+    background: "#f3f4f6",
+    border: "1px solid #e5e7eb",
+    fontWeight: 600,
+    whiteSpace: "nowrap",
   },
   zoneCount: {
-    fontSize: 15,
-    fontWeight: 600,
-    marginBottom: 12,
-  },
-  nearbyBox: {
-    padding: "12px 14px",
-    borderRadius: 10,
-    border: "1px solid #e5e7eb",
-    background: "#f9fafb",
-  },
-  nearbyItem: {
-    paddingBottom: 12,
-    marginBottom: 12,
-    borderBottom: "1px solid #e5e7eb",
-  },
-  nearbyItemLast: {
-    paddingBottom: 0,
-    marginBottom: 0,
-    borderBottom: "0",
-  },
-  nearestTitle: {
-    fontSize: 12,
-    opacity: 0.7,
-    marginBottom: 10,
-    textTransform: "uppercase",
-    letterSpacing: "0.03em",
-  },
-  nearestMain: {
-    fontSize: 16,
-    fontWeight: 600,
-  },
-  nearestMeta: {
-    marginTop: 4,
     fontSize: 14,
     opacity: 0.8,
+    marginTop: 0,
+    marginBottom: 12,
+  },
+  list: {
+    listStyle: "none",
+    padding: 0,
+    margin: 0,
+  },
+  item: {
+    display: "flex",
+    gap: 14,
+    alignItems: "flex-start",
+    border: "1px solid #e5e5e5",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    background: "#fff",
+  },
+  thumb: {
+    width: 86,
+    height: 86,
+    borderRadius: 12,
+    objectFit: "cover",
+    border: "1px solid #ddd",
+    background: "#fff",
+    flexShrink: 0,
+  },
+  content: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rowTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "baseline",
+    flexWrap: "wrap",
+  },
+  itemTitle: {
+    fontSize: 16,
+  },
+  distance: {
+    fontSize: 12,
+    padding: "4px 10px",
+    borderRadius: 999,
+    background: "#f3f4f6",
+    border: "1px solid #e5e7eb",
+    fontWeight: 600,
+    opacity: 0.95,
+    whiteSpace: "nowrap",
+  },
+  desc: {
+    margin: "6px 0 0",
+    opacity: 0.85,
+    lineHeight: 1.4,
   },
   noNearbyBox: {
     padding: "12px 14px",
-    borderRadius: 10,
+    borderRadius: 12,
     border: "1px solid #e5e7eb",
     background: "#fafafa",
-    opacity: 0.75,
+    opacity: 0.8,
+  },
+  footer: {
+    marginTop: 32,
+    paddingTop: 16,
+    borderTop: "1px solid #eee",
+    fontSize: 13,
+    opacity: 0.7,
+  },
+  footerText: {
+    margin: 0,
   },
 };

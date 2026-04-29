@@ -13,17 +13,37 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/*
+  El MVP se fuerza a modo claro para evitar problemas de contraste
+  cuando el navegador o el sistema están configurados en modo oscuro.
+*/
+html {
+  color-scheme: light;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/*
+  Asegura contraste en controles nativos aunque Chrome esté en modo oscuro.
+*/
+button,
+input,
+textarea,
+select {
+  color: #171717;
+  background-color: #ffffff;
+}
+
+/*
+  Los botones oscuros definidos inline mantienen su color propio.
+*/
+button[style*="background: rgb(17, 17, 17)"],
+button[style*="background: #111"] {
+  color: #ffffff;
 }
 
 .leaflet-container {

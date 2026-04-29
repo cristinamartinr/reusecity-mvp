@@ -28,6 +28,9 @@ type ItemWithDistance = ItemReport & {
   distanceKm: number | null;
 };
 
+/**
+ * Devuelve una etiqueta legible con el tiempo transcurrido desde la publicación.
+ */
 function timeAgo(iso: string) {
   const d = new Date(iso);
   const diffMs = Date.now() - d.getTime();
@@ -44,14 +47,16 @@ function timeAgo(iso: string) {
   return `hace ${day} d`;
 }
 
+/**
+ * Aplica el filtro temporal seleccionado por el usuario.
+ */
 function isWithinFreshness(createdAt: string, filter: FreshnessFilter) {
   if (filter === "all") return true;
 
   const createdMs = new Date(createdAt).getTime();
   if (Number.isNaN(createdMs)) return true;
 
-  const now = Date.now();
-  const diff = now - createdMs;
+  const diff = Date.now() - createdMs;
 
   const hours24 = 24 * 60 * 60 * 1000;
   const hours48 = 48 * 60 * 60 * 1000;
@@ -64,6 +69,10 @@ function isWithinFreshness(createdAt: string, filter: FreshnessFilter) {
   return true;
 }
 
+/**
+ * Comprueba si un aviso ha caducado según expires_at.
+ * Para el MVP se filtra en frontend sin modificar necesariamente el estado en BD.
+ */
 function isExpired(expiresAt: string | null) {
   if (!expiresAt) return false;
 
@@ -77,6 +86,9 @@ function toRadians(value: number) {
   return (value * Math.PI) / 180;
 }
 
+/**
+ * Calcula la distancia entre dos coordenadas usando la fórmula Haversine.
+ */
 function getDistanceKm(from: Coordinates, to: Coordinates) {
   const earthRadiusKm = 6371;
 
@@ -98,6 +110,9 @@ function getDistanceKm(from: Coordinates, to: Coordinates) {
   return earthRadiusKm * c;
 }
 
+/**
+ * Formatea la distancia de forma más útil para el usuario.
+ */
 function formatDistance(distanceKm: number | null) {
   if (distanceKm == null) return null;
 
@@ -122,6 +137,10 @@ function ListaContent() {
   const [hasTriedAutoLocation, setHasTriedAutoLocation] = useState(false);
   const [freshness, setFreshness] = useState<FreshnessFilter>("all");
 
+  /**
+   * Carga avisos disponibles desde Supabase.
+   * Se excluyen también los avisos caducados para mantener consistencia visual.
+   */
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -129,7 +148,9 @@ function ListaContent() {
 
       const { data, error } = await supabase
         .from("item_reports")
-        .select("id,title,description,status,created_at,expires_at,photo_url,lat,lng")
+        .select(
+          "id,title,description,status,created_at,expires_at,photo_url,lat,lng"
+        )
         .eq("status", "AVAILABLE")
         .order("created_at", { ascending: false });
 
@@ -151,6 +172,10 @@ function ListaContent() {
     load();
   }, []);
 
+  /**
+   * Solicita la ubicación del usuario.
+   * Si se obtiene, la lista se ordena por cercanía.
+   */
   const requestLocation = (isAutomatic = false) => {
     if (!navigator.geolocation) {
       if (!isAutomatic) {
@@ -169,14 +194,14 @@ function ListaContent() {
         });
 
         if (!isAutomatic) {
-          setGeoMsg("📍 Lista ordenada por cercanía a tu ubicación.");
+          setGeoMsg("Lista ordenada por cercanía a tu ubicación.");
         }
 
         setGettingLocation(false);
       },
       () => {
         if (!isAutomatic) {
-          setGeoMsg("No se pudo obtener tu ubicación (permiso denegado o error).");
+          setGeoMsg("No se pudo obtener tu ubicación.");
         }
         setGettingLocation(false);
       },
@@ -187,6 +212,9 @@ function ListaContent() {
     );
   };
 
+  /**
+   * Intenta obtener ubicación automáticamente una vez al cargar la pantalla.
+   */
   useEffect(() => {
     if (hasTriedAutoLocation) return;
 
@@ -199,17 +227,16 @@ function ListaContent() {
     requestLocation(false);
   };
 
+  /**
+   * Aplica filtros y calcula distancia cuando existe ubicación del usuario.
+   */
   const visibleItems = useMemo(() => {
     const filtered = items.filter((it) =>
       isWithinFreshness(it.created_at, freshness)
     );
 
     const enriched: ItemWithDistance[] = filtered.map((it) => {
-      if (
-        !userLocation ||
-        it.lat == null ||
-        it.lng == null
-      ) {
+      if (!userLocation || it.lat == null || it.lng == null) {
         return {
           ...it,
           distanceKm: null,
@@ -244,50 +271,56 @@ function ListaContent() {
       </Link>
 
       <h1 style={styles.h1}>Lista</h1>
-      <p style={styles.p}>
-        Explora avisos disponibles publicados recientemente.
-      </p>
+      <p style={styles.p}>Explora avisos disponibles publicados recientemente.</p>
 
       {created && (
-        <div style={styles.success}>
-          ✅ Aviso publicado correctamente
-        </div>
+        <div style={styles.success}>Aviso publicado correctamente.</div>
       )}
 
-      {removed && (
-        <div style={styles.success}>
-          ✅ Aviso marcado como retirado
-        </div>
-      )}
+      {removed && <div style={styles.success}>Aviso marcado como retirado.</div>}
 
       <div style={styles.toolbar}>
-        <label htmlFor="freshness" style={styles.filterLabel}>
-          Mostrar:
-        </label>
+        <div style={styles.filterGroup}>
+          <label htmlFor="freshness" style={styles.filterLabel}>
+            Mostrar:
+          </label>
 
-        <select
-          id="freshness"
-          value={freshness}
-          onChange={(e) => setFreshness(e.target.value as FreshnessFilter)}
-          style={styles.select}
-        >
-          <option value="all">Todos</option>
-          <option value="24h">Últimas 24 h</option>
-          <option value="48h">Últimas 48 h</option>
-          <option value="7d">Últimos 7 días</option>
-        </select>
+          <select
+            id="freshness"
+            value={freshness}
+            onChange={(e) => setFreshness(e.target.value as FreshnessFilter)}
+            style={styles.select}
+          >
+            <option value="all">Todos</option>
+            <option value="24h">Últimas 24 h</option>
+            <option value="48h">Últimas 48 h</option>
+            <option value="7d">Últimos 7 días</option>
+          </select>
+        </div>
 
         <button
           type="button"
           onClick={updateMyLocation}
           disabled={gettingLocation}
-          style={styles.locationBtn}
+          style={{
+            ...styles.locationBtn,
+            ...(gettingLocation ? styles.disabledBtn : {}),
+          }}
         >
           {gettingLocation ? "Localizando…" : "Actualizar mi ubicación"}
         </button>
       </div>
 
       {geoMsg ? <div style={styles.info}>{geoMsg}</div> : null}
+
+      {userLocation && visibleItems.length > 0 ? (
+        <div style={styles.nearbyBox}>
+          <strong style={styles.nearbyTitle}>Avisos más cercanos</strong>
+          <p style={styles.nearbyText}>
+            Los resultados se muestran ordenados por distancia a tu ubicación.
+          </p>
+        </div>
+      ) : null}
 
       {loading ? <p>Cargando…</p> : null}
       {msg ? <p style={styles.msg}>{msg}</p> : null}
@@ -307,11 +340,7 @@ function ListaContent() {
           return (
             <li key={it.id} style={styles.item}>
               {it.photo_url ? (
-                <img
-                  src={it.photo_url}
-                  alt={mainLabel}
-                  style={styles.thumb}
-                />
+                <img src={it.photo_url} alt={mainLabel} style={styles.thumb} />
               ) : (
                 <div style={styles.thumbPlaceholder}>Sin foto</div>
               )}
@@ -319,8 +348,10 @@ function ListaContent() {
               <div style={styles.content}>
                 <div style={styles.rowTop}>
                   <strong style={styles.title}>{mainLabel}</strong>
+
                   <div style={styles.metaGroup}>
                     <span style={styles.meta}>{timeAgo(it.created_at)}</span>
+
                     {it.distanceKm != null ? (
                       <span style={styles.distance}>
                         {formatDistance(it.distanceKm)}
@@ -343,6 +374,12 @@ function ListaContent() {
           );
         })}
       </ul>
+
+      <footer style={styles.footer}>
+        <p style={styles.footerText}>
+          Avisos ordenados por cercanía si activas tu ubicación.
+        </p>
+      </footer>
     </main>
   );
 }
@@ -374,11 +411,26 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "48px 16px",
     fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
   },
-  back: { textDecoration: "none" },
-  h1: { marginTop: 16 },
-  p: { opacity: 0.8, lineHeight: 1.5, marginBottom: 18 },
-  msg: { color: "crimson" },
-
+  back: {
+    textDecoration: "none",
+    display: "inline-block",
+    marginBottom: 16,
+    color: "inherit",
+  },
+  h1: {
+    marginTop: 0,
+    marginBottom: 6,
+    fontSize: 24,
+  },
+  p: {
+    opacity: 0.8,
+    lineHeight: 1.5,
+    marginTop: 0,
+    marginBottom: 18,
+  },
+  msg: {
+    color: "crimson",
+  },
   success: {
     margin: "12px 0 16px",
     padding: "12px 14px",
@@ -387,7 +439,6 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#ecfdf5",
     color: "#065f46",
   },
-
   info: {
     marginBottom: 16,
     padding: "12px 14px",
@@ -396,12 +447,17 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#eff6ff",
     color: "#1d4ed8",
   },
-
   toolbar: {
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
+    marginBottom: 18,
+    flexWrap: "wrap",
+  },
+  filterGroup: {
     display: "flex",
     gap: 10,
     alignItems: "center",
-    marginBottom: 18,
     flexWrap: "wrap",
   },
   filterLabel: {
@@ -413,24 +469,51 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     border: "1px solid #ccc",
     background: "white",
+    minWidth: 180,
+    cursor: "pointer",
   },
   locationBtn: {
-    padding: "10px 12px",
+    padding: "10px 14px",
     borderRadius: 10,
     border: "1px solid #ccc",
     background: "white",
     cursor: "pointer",
+    fontWeight: 500,
   },
-
-  list: { listStyle: "none", padding: 0, margin: 0 },
+  disabledBtn: {
+    opacity: 0.65,
+    cursor: "not-allowed",
+  },
+  nearbyBox: {
+    marginBottom: 18,
+    padding: "12px 14px",
+    borderRadius: 12,
+    background: "#f9fafb",
+    border: "1px solid #e5e7eb",
+  },
+  nearbyTitle: {
+    display: "block",
+    marginBottom: 4,
+  },
+  nearbyText: {
+    margin: 0,
+    fontSize: 13,
+    opacity: 0.75,
+  },
+  list: {
+    listStyle: "none",
+    padding: 0,
+    margin: 0,
+  },
   item: {
     display: "flex",
     gap: 14,
     alignItems: "flex-start",
     border: "1px solid #e5e5e5",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 16,
+    background: "white",
   },
   thumb: {
     width: 90,
@@ -464,24 +547,32 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "baseline",
     flexWrap: "wrap",
   },
-  title: { fontSize: 16 },
+  title: {
+    fontSize: 16,
+  },
   metaGroup: {
     display: "flex",
-    gap: 10,
+    gap: 12, // subir de 10 a 12
     alignItems: "center",
     flexWrap: "wrap",
-    justifyContent: "flex-end",
   },
-  meta: { fontSize: 12, opacity: 0.7 },
+  meta: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
   distance: {
     fontSize: 12,
-    padding: "2px 8px",
+    padding: "4px 10px",
     borderRadius: 999,
     background: "#f3f4f6",
     border: "1px solid #e5e7eb",
-    opacity: 0.9,
+    fontWeight: 600,
+    opacity: 0.95,
   },
-  desc: { margin: "6px 0 0", opacity: 0.85 },
+  desc: {
+    margin: "6px 0 0",
+    opacity: 0.85,
+  },
   actions: {
     marginTop: 12,
     display: "flex",
@@ -495,5 +586,16 @@ const styles: Record<string, React.CSSProperties> = {
     textDecoration: "none",
     color: "inherit",
     background: "white",
+    fontWeight: 500,
+  },
+  footer: {
+    marginTop: 32,
+    paddingTop: 16,
+    borderTop: "1px solid #eee",
+    fontSize: 13,
+    opacity: 0.7,
+  },
+  footerText: {
+    margin: 0,
   },
 };

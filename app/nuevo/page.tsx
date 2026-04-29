@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function NuevoPage() {
@@ -10,81 +10,96 @@ export default function NuevoPage() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
-  const [photo, setPhoto] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const handleLocation = () => {
+  /**
+   * Obtiene la ubicación actual del usuario.
+   */
+  const handleGetLocation = () => {
     if (!navigator.geolocation) {
-      alert("Tu navegador no soporta geolocalización");
+      setMsg("Tu navegador no soporta geolocalización.");
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLat(pos.coords.latitude.toString());
-        setLng(pos.coords.longitude.toString());
+        setLat(String(pos.coords.latitude));
+        setLng(String(pos.coords.longitude));
       },
       () => {
-        alert("No se pudo obtener la ubicación");
+        setMsg("No se pudo obtener la ubicación.");
       }
     );
   };
 
-  const handleSubmit = async () => {
-    if (!description.trim()) {
-      setMsg("Añade al menos una descripción.");
+  /**
+   * Sube la foto a Supabase Storage y devuelve la URL pública.
+   */
+  const uploadPhoto = async () => {
+    if (!photo) return null;
+
+    const fileName = `items/${Date.now()}-${photo.name}`;
+
+    const { error } = await supabase.storage
+      .from("item-photos")
+      .upload(fileName, photo);
+
+    if (error) {
+      throw new Error("Error subiendo la imagen");
+    }
+
+    const { data } = supabase.storage
+      .from("item-photos")
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  };
+
+  /**
+   * Guarda el aviso en la base de datos.
+   */
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!lat || !lng) {
+      setMsg("Necesitas añadir una ubicación.");
       return;
     }
 
     setLoading(true);
     setMsg(null);
 
-    let photoUrl: string | null = null;
+    try {
+      const photoUrl = await uploadPhoto();
 
-    if (photo) {
-      const fileName = `items/${Date.now()}-${photo.name}`;
+      const { error } = await supabase.from("item_reports").insert({
+        title: title || null,
+        description: description || null,
+        lat: Number(lat),
+        lng: Number(lng),
+        status: "AVAILABLE",
+        photo_url: photoUrl,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(
+          Date.now() + 24 * 60 * 60 * 1000
+        ).toISOString(),
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from("item-photos")
-        .upload(fileName, photo);
-
-      if (uploadError) {
-        setMsg("Error subiendo imagen: " + uploadError.message);
+      if (error) {
+        setMsg("Error al guardar: " + error.message);
         setLoading(false);
         return;
       }
 
-      const { data } = supabase.storage
-        .from("item-photos")
-        .getPublicUrl(fileName);
-
-      photoUrl = data.publicUrl;
-    }
-
-    const { error } = await supabase.from("item_reports").insert([
-      {
-        title,
-        description,
-        photo_url: photoUrl,
-        //coordenadas con 4 decimales para mayor privacidad (aprox 10m de precisión)
-        lat: lat ? Number(Number(lat).toFixed(4)) : null,
-        lng: lng ? Number(Number(lng).toFixed(4)) : null,
-        status: "AVAILABLE",
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      },
-    ]);
-
-    if (error) {
-      setMsg("Error creando aviso: " + error.message);
+      router.push("/lista?created=1");
+    } catch (err: any) {
+      setMsg(err.message);
       setLoading(false);
-      return;
     }
-
-    router.push("/lista?created=1");
   };
 
   return (
@@ -94,8 +109,11 @@ export default function NuevoPage() {
       </Link>
 
       <h1 style={styles.h1}>Nuevo aviso</h1>
+      <p style={styles.p}>
+        Publica un objeto reutilizable en unos pocos pasos.
+      </p>
 
-      <div style={styles.card}>
+      <form onSubmit={handleSubmit} style={styles.form}>
         <input
           type="text"
           placeholder="Título (opcional)"
@@ -105,40 +123,67 @@ export default function NuevoPage() {
         />
 
         <textarea
-          placeholder="Describe el objeto..."
+          placeholder="Descripción (opcional)"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           style={styles.textarea}
         />
 
-        <button onClick={handleLocation} style={styles.secondaryBtn}>
+        {/* BOTÓN DE FOTO MEJORADO */}
+        <label style={styles.fileBtn}>
+          Seleccionar foto
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+            style={styles.fileInputHidden}
+          />
+        </label>
+
+        {photo ? (
+          <p style={styles.fileName}>
+            Foto seleccionada: {photo.name}
+          </p>
+        ) : (
+          <p style={styles.fileHint}>
+            Opcional: añade una foto del objeto.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={handleGetLocation}
+          style={styles.secondaryBtn}
+        >
           Usar mi ubicación
         </button>
 
         <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+          type="text"
+          placeholder="Latitud"
+          value={lat}
+          onChange={(e) => setLat(e.target.value)}
+          style={styles.input}
+        />
+
+        <input
+          type="text"
+          placeholder="Longitud"
+          value={lng}
+          onChange={(e) => setLng(e.target.value)}
+          style={styles.input}
         />
 
         <button
-          onClick={handleSubmit}
+          type="submit"
           disabled={loading}
           style={styles.primaryBtn}
         >
-          {loading ? "Publicando..." : "Publicar"}
+          {loading ? "Publicando…" : "Publicar aviso"}
         </button>
 
-        {/* 🔥 AQUÍ va el bloque de normas */}
-        <p style={styles.notice}>
-          Al publicar aceptas las{" "}
-          <Link href="/normas" style={styles.link}>
-            normas de uso y privacidad
-          </Link>.
-        </p>
-
-        {msg && <p style={styles.error}>{msg}</p>}
-      </div>
+        {msg && <p style={styles.msg}>{msg}</p>}
+      </form>
     </main>
   );
 }
@@ -148,20 +193,22 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 600,
     margin: "0 auto",
     padding: "48px 16px",
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    fontFamily:
+      "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
   },
   back: {
     textDecoration: "none",
     display: "inline-block",
-    marginBottom: 12,
-  },
-  h1: {
     marginBottom: 16,
   },
-  card: {
-    border: "1px solid #ddd",
-    borderRadius: 12,
-    padding: 16,
+  h1: {
+    marginBottom: 8,
+  },
+  p: {
+    opacity: 0.8,
+    marginBottom: 20,
+  },
+  form: {
     display: "flex",
     flexDirection: "column",
     gap: 12,
@@ -175,16 +222,45 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "10px 12px",
     borderRadius: 10,
     border: "1px solid #ccc",
-    minHeight: 100,
+    minHeight: 80,
   },
+
+  /* BOTÓN FOTO */
+  fileBtn: {
+    display: "inline-block",
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid #ccc",
+    background: "#fff",
+    color: "#111",
+    cursor: "pointer",
+    fontWeight: 500,
+    textAlign: "center",
+  },
+
+  fileInputHidden: {
+    display: "none",
+  },
+
+  fileName: {
+    fontSize: 13,
+    opacity: 0.8,
+  },
+
+  fileHint: {
+    fontSize: 13,
+    opacity: 0.6,
+  },
+
   primaryBtn: {
     padding: "12px 14px",
     borderRadius: 10,
-    border: "0",
+    border: 0,
     background: "#111",
     color: "#fff",
     cursor: "pointer",
   },
+
   secondaryBtn: {
     padding: "10px 12px",
     borderRadius: 10,
@@ -192,16 +268,8 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#fff",
     cursor: "pointer",
   },
-  notice: {
-    fontSize: 12,
-    opacity: 0.7,
-    marginTop: 6,
-  },
-  link: {
-    textDecoration: "underline",
-  },
-  error: {
+
+  msg: {
     color: "crimson",
-    fontSize: 14,
   },
 };
