@@ -27,7 +27,6 @@ type NearbyItem = ItemReport & {
   distanceMeters: number;
 };
 
-const STORAGE_KEY = "reusecity_alerts";
 const DEFAULT_RADIUS_METERS = 300;
 
 const FALLBACK_IMAGE =
@@ -101,29 +100,71 @@ export default function AlertasPage() {
   const [loadingItems, setLoadingItems] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
 
+  const [userId, setUserId] = useState<string | null>(null);
+const [loadingAuth, setLoadingAuth] = useState(true);
+
+useEffect(() => {
+  const initAuth = async () => {
+    setLoadingAuth(true);
+
+    // Recuperar la sesión existente, si la hay.
+    const { data: sessionData, error: sessionError } =
+      await supabase.auth.getSession();
+
+    if (sessionError) {
+      console.error("Error al recuperar la sesión:", sessionError);
+      setMsg("No se pudo recuperar la sesión.");
+      setLoadingAuth(false);
+      return;
+    }
+
+    if (sessionData.session?.user) {
+      setUserId(sessionData.session.user.id);
+      setLoadingAuth(false);
+      return;
+    }
+
+    // Si no existe sesión, crear una anónima.
+    const { data, error } = await supabase.auth.signInAnonymously();
+
+    if (error) {
+      console.error("Error de autenticación anónima:", error);
+      setMsg("No se pudo iniciar la sesión anónima.");
+    } else {
+      setUserId(data.user?.id ?? null);
+    }
+
+    setLoadingAuth(false);
+  };
+
+  initAuth();
+}, []);
+
   /**
    * Recupera las alertas guardadas en localStorage.
    * También normaliza zonas antiguas al radio actual de 300 metros.
    */
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+  if (!userId) return;
 
-    if (stored) {
-      try {
-        const parsedZones = JSON.parse(stored) as AlertZone[];
+  const loadZones = async () => {
+    const { data, error } = await supabase
+      .from("alert_zones")
+      .select("id,name,lat,lng,radius")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
 
-        const normalizedZones = parsedZones.map((zone) => ({
-          ...zone,
-          radius: DEFAULT_RADIUS_METERS,
-        }));
-
-        setZones(normalizedZones);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedZones));
-      } catch {
-        setZones([]);
-      }
+    if (error) {
+      console.error("Error al cargar las zonas:", error);
+      setMsg("No se pudieron cargar las zonas guardadas.");
+      return;
     }
-  }, []);
+
+    setZones((data ?? []) as AlertZone[]);
+  };
+
+  loadZones();
+}, [userId]);
 
   /**
    * Carga avisos disponibles desde Supabase.
@@ -161,57 +202,96 @@ export default function AlertasPage() {
   }, []);
 
   /**
-   * Guarda zonas en estado y localStorage.
-   */
-  const saveZones = (newZones: AlertZone[]) => {
-    setZones(newZones);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newZones));
-  };
-
-  /**
    * Crea una nueva alerta usando la ubicación actual del usuario.
    */
   const handleAddZone = () => {
-    if (!name.trim()) {
-      alert("Pon un nombre a la zona.");
-      return;
-    }
+  if (!name.trim()) {
+    alert("Pon un nombre a la zona.");
+    return;
+  }
 
-    if (!navigator.geolocation) {
-      alert("Tu navegador no soporta geolocalización.");
-      return;
-    }
+  if (!userId) {
+    alert("Todavía se está iniciando la sesión. Inténtalo de nuevo.");
+    return;
+  }
 
-    setLoadingLocation(true);
+  if (!navigator.geolocation) {
+    alert("Tu navegador no soporta geolocalización.");
+    return;
+  }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const newZone: AlertZone = {
-          id: Date.now().toString(),
+  setLoadingLocation(true);
+  setMsg(null);
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const { data, error } = await supabase
+        .from("alert_zones")
+        .insert({
+          user_id: userId,
           name: name.trim(),
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           radius: DEFAULT_RADIUS_METERS,
-        };
+        })
+        .select("id,name,lat,lng,radius")
+        .single();
 
-        saveZones([...zones, newZone]);
-        setName("");
+      if (error) {
+        console.error("Error al guardar la zona:", error);
+        setMsg("No se pudo guardar la zona: " + error.message);
         setLoadingLocation(false);
-      },
-      () => {
-        alert("No se pudo obtener la ubicación.");
-        setLoadingLocation(false);
+        return;
       }
-    );
-  };
+
+      setZones((currentZones) => [...currentZones, data as AlertZone]);
+      setName("");
+      setLoadingLocation(false);
+    },
+    () => {
+      setMsg("No se pudo obtener la ubicación.");
+      setLoadingLocation(false);
+    }
+  );
+};
 
   /**
    * Elimina una alerta guardada.
    */
-  const handleDelete = (id: string) => {
-    const filtered = zones.filter((z) => z.id !== id);
-    saveZones(filtered);
-  };
+const handleDelete = async (id: string) => {
+  if (!userId) {
+    setMsg("No hay una sesión activa.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    "¿Quieres eliminar esta zona de alerta?"
+  );
+
+  if (!confirmed) return;
+
+  const { data, error } = await supabase
+    .from("alert_zones")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select("id");
+
+  if (error) {
+    console.error("Error al eliminar la zona:", error);
+    setMsg("No se pudo eliminar la zona: " + error.message);
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    setMsg("No se encontró la zona o no tienes permiso para eliminarla.");
+    return;
+  }
+
+  setZones((currentZones) =>
+    currentZones.filter((zone) => zone.id !== id)
+  );
+};
 
   /**
    * Calcula los avisos cercanos para cada alerta.
@@ -368,7 +448,8 @@ export default function AlertasPage() {
 
       <footer style={styles.footer}>
         <p style={styles.footerText}>
-          Las alertas se guardan en este dispositivo mediante almacenamiento local.
+          Tus zonas de interés se guardan de forma segura y se asocian a
+          una sesión anónima de este navegador.
         </p>
       </footer>
     </main>
